@@ -140,9 +140,9 @@ shared_ptr<container::value_container> file_manager::received(const wstring& ind
 #else
 		if (temp != 100)
 		{
-			return make_shared<container::value_container>(ids->second.first, ids->second.second, TRANSFER_CONDITON,
+			return make_shared<container::value_container>(ids->second.first, ids->second.second, L"transfer_condition",
 				vector<shared_ptr<container::value>> {
-					make_shared<container::string_value>(INDICATION_ID, indication_id),
+					make_shared<container::string_value>(L"indication_id", indication_id),
 					make_shared<container::ushort_value>(L"percentage", temp)
 			});
 		}
@@ -150,9 +150,9 @@ shared_ptr<container::value_container> file_manager::received(const wstring& ind
 		size_t completed = target->second.size();
 		size_t failed = fail->second.size();
 
-		return make_shared<container::value_container>(ids->second.first, ids->second.second, TRANSFER_CONDITON,
+		return make_shared<container::value_container>(ids->second.first, ids->second.second, L"transfer_condition",
 			vector<shared_ptr<container::value>> {
-				make_shared<container::string_value>(INDICATION_ID, indication_id),
+				make_shared<container::string_value>(L"indication_id", indication_id),
 				make_shared<container::ushort_value>(L"percentage", temp),
 				make_shared<container::ullong_value>(L"completed_count", completed),
 				make_shared<container::ullong_value>(L"failed_count", failed),
@@ -206,9 +206,9 @@ shared_ptr<container::value_container> file_manager::received(const wstring& ind
 
 		return container;
 #else
-		return make_shared<container::value_container>(source_id, source_sub_id, TRANSFER_CONDITON,
+		return make_shared<container::value_container>(source_id, source_sub_id, L"transfer_condition",
 			vector<shared_ptr<container::value>> {
-				make_shared<container::string_value>(INDICATION_ID, indication_id),
+				make_shared<container::string_value>(L"indication_id", indication_id),
 				make_shared<container::ushort_value>(L"percentage", temp),
 				make_shared<container::ullong_value>(L"completed_count", completed),
 				make_shared<container::ullong_value>(L"failed_count", failed),

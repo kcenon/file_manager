@@ -303,12 +303,17 @@ void received_message(shared_ptr<container::value_container> container)
 		return;
 	}
 
+#ifdef __USE_TYPE_CONTAINER__
+	logger::handle().write(logging_level::information,
+		fmt::format(L"received message: {}", container->serialize()));
+#else
 #ifdef _WIN32
 	logger::handle().write(logging_level::information,
 		fmt::format(L"received message: {}", container->serialize()));
 #else
 	logger::handle().write(logging_level::information,
 		converter::to_wstring(fmt::format("received message: {}", container->serialize())));
+#endif
 #endif
 }
 
@@ -396,12 +401,12 @@ void upload_files(shared_ptr<container::value_container> container)
 	vector<shared_ptr<container::value>> files = container->value_array(L"file");
 	for (auto& file : files)
 	{
-		target_paths.push_back((*file)[TARGET]->to_string());
+		target_paths.push_back((*file)[L"target"]->to_string());
 	}
 
-	_file_manager->set(container->get_value(INDICATION_ID)->to_string(),
-		container->get_value(GATEWAY_SOURCE_ID)->to_string(),
-		container->get_value(GATEWAY_SOURCE_SUB_ID)->to_string(), target_paths);
+	_file_manager->set(container->get_value(L"indication_id")->to_string(),
+		container->get_value(L"gateway_source_id")->to_string(),
+		container->get_value(L"gateway_source_sub_id")->to_string(), target_paths);
 #endif
 
 	if (_main_server)
@@ -432,11 +437,11 @@ void upload_files(shared_ptr<container::value_container> container)
 		_main_server->send(start_message, session_types::file_line);
 #else
 		_main_server->send(make_shared<container::value_container>(
-			container->get_value(GATEWAY_SOURCE_ID)->to_string(), 
-			container->get_value(GATEWAY_SOURCE_SUB_ID)->to_string(),
-			TRANSFER_CONDITON, 
+			container->get_value(L"gatway_source_id")->to_string(), 
+			container->get_value(L"gatway_source_sub_id")->to_string(),
+			L"transfer_condition", 
 			vector<shared_ptr<container::value>> {
-				make_shared<container::string_value>(INDICATION_ID, container->get_value(INDICATION_ID)->to_string()),
+				make_shared<container::string_value>(L"indication_id", container->get_value(L"indication_id")->to_string()),
 				make_shared<container::ushort_value>(L"percentage", 0)
 		}), session_types::file_line);
 #endif

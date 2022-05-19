@@ -367,10 +367,14 @@ void received_message(shared_ptr<json::value> container)
 		return;
 	}
 
+#ifdef __USE_TYPE_CONTAINER__
+	logger::handle().write(logging_level::sequence, fmt::format(L"unknown message: {}", container->serialize()));
+#else
 #ifdef _WIN32
 	logger::handle().write(logging_level::sequence, fmt::format(L"unknown message: {}", container->serialize()));
 #else
 	logger::handle().write(logging_level::sequence, converter::to_wstring(fmt::format("unknown message: {}", container->serialize())));
+#endif
 #endif
 }
 
@@ -386,7 +390,7 @@ void transfer_condition(shared_ptr<json::value> container)
 	}
 
 #ifdef __USE_TYPE_CONTAINER__
-	if (container->message_type() != TRANSFER_CONDITON)
+	if (container->message_type() != L"transfer_condition")
 #else
 #ifdef _WIN32
 	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != TRANSFER_CONDITON)
@@ -402,12 +406,19 @@ void transfer_condition(shared_ptr<json::value> container)
 	shared_ptr<json::value> condition = make_shared<json::value>(json::value::object(true));
 
 #ifdef __USE_TYPE_CONTAINER__
-	indication_id = container->get_value(INDICATION_ID)->to_string();
+	indication_id = container->get_value(L"indication_id")->to_string();
 
-	(*condition)[MESSAGE_TYPE] = json::value::string(container->message_type());
-	(*condition)[INDICATION_ID] = json::value::string(indication_id);
+#ifdef _WIN32
+	(*condition)[L"message_type"] = json::value::string(container->message_type());
+	(*condition)[L"indication_id"] = json::value::string(indication_id);
 	(*condition)[L"percentage"] = json::value::number(container->get_value(L"percentage")->to_ushort());
 	(*condition)[L"completed"] = json::value::boolean(container->get_value(L"completed")->to_boolean());
+#else
+	(*condition)["message_type"] = json::value::string(converter::to_string(container->message_type()));
+	(*condition)["indication_id"] = json::value::string(converter::to_string(indication_id));
+	(*condition)["percentage"] = json::value::number(container->get_value(L"percentage")->to_ushort());
+	(*condition)["completed"] = json::value::boolean(container->get_value(L"completed")->to_boolean());
+#endif
 #else
 #ifdef _WIN32
 	indication_id = (*container)[DATA][INDICATION_ID].as_string();
@@ -482,17 +493,31 @@ void transfer_files(shared_ptr<json::value> request)
 #else
 	vector<shared_ptr<container::value>> files;
 
-	files.push_back(make_shared<container::string_value>(INDICATION_ID, (*request)[INDICATION_ID].as_string()));
+#ifdef _WIN32
+	files.push_back(make_shared<container::string_value>(L"indication_id", (*request)[L"indication_id"].as_string()));
+#else
+	files.push_back(make_shared<container::string_value>(L"indication_id", converter::to_wstring((*request)["indication_id"].as_string())));
+#endif
+
 	for (auto& file : file_array)
 	{
 		files.push_back(make_shared<container::container_value>(L"file", vector<shared_ptr<container::value>> {
-			make_shared<container::string_value>(SOURCE, file[SOURCE].as_string()),
-			make_shared<container::string_value>(TARGET, file[TARGET].as_string())
+#ifdef _WIN32
+			make_shared<container::string_value>(L"source", file[SOURCE].as_string()),
+			make_shared<container::string_value>(L"target", file[TARGET].as_string())
+#else
+			make_shared<container::string_value>(L"source", converter::to_wstring(file[SOURCE].as_string())),
+			make_shared<container::string_value>(L"target", converter::to_wstring(file[TARGET].as_string()))
+#endif
 		}));
 	}
 
 	shared_ptr<container::value_container> container =
+#ifdef _WIN32
 		make_shared<container::value_container>(L"main_server", L"", (*request)[MESSAGE_TYPE].as_string(), files);
+#else
+		make_shared<container::value_container>(L"main_server", L"", converter::to_wstring((*request)[MESSAGE_TYPE].as_string()), files);
+#endif
 #endif
 
 	_data_line->send(container);

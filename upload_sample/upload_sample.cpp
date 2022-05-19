@@ -143,12 +143,12 @@ int main(int argc, char* argv[])
 #else
 	vector<shared_ptr<container::value>> files;
 
-	files.push_back(make_shared<container::string_value>(INDICATION_ID, L"upload_test"));
+	files.push_back(make_shared<container::string_value>(L"indication_id", L"upload_test"));
 	for (auto& source : sources)
 	{
 		files.push_back(make_shared<container::container_value>(L"file", vector<shared_ptr<container::value>> {
-			make_shared<container::string_value>(SOURCE, source),
-			make_shared<container::string_value>(TARGET, converter::replace2(source, source_folder, target_folder))
+			make_shared<container::string_value>(L"source", source),
+			make_shared<container::string_value>(L"target", converter::replace2(source, source_folder, target_folder))
 		}));
 	}
 
@@ -323,10 +323,15 @@ void received_message(shared_ptr<container::value_container> container)
 
 		return;
 	}
+
+#ifdef __USE_TYPE_CONTAINER__
+	logger::handle().write(logging_level::sequence, fmt::format(L"unknown message: {}", container->serialize()));
+#else
 #ifdef _WIN32
 	logger::handle().write(logging_level::sequence, fmt::format(L"unknown message: {}", container->serialize()));
 #else
 	logger::handle().write(logging_level::sequence, converter::to_wstring(fmt::format("unknown message: {}", container->serialize())));
+#endif
 #endif
 }
 
@@ -348,7 +353,7 @@ void transfer_condition(shared_ptr<container::value_container> container)
 	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != TRANSFER_CONDITON)
 #endif
 #else
-	if (container->message_type() != TRANSFER_CONDITON)
+	if (container->message_type() != L"transfer_condition")
 #endif
 	{
 		return;
@@ -374,7 +379,7 @@ void transfer_condition(shared_ptr<container::value_container> container)
 #endif
 #else
 		logger::handle().write(logging_level::information,
-			fmt::format(L"started upload: [{}]", container->get_value(INDICATION_ID)->to_string()));
+			fmt::format(L"started upload: [{}]", container->get_value(L"indication_id")->to_string()));
 #endif
 
 		return;
@@ -392,7 +397,7 @@ void transfer_condition(shared_ptr<container::value_container> container)
 #endif
 #else
 	logger::handle().write(logging_level::information,
-		fmt::format(L"received percentage: [{}] {}%", container->get_value(INDICATION_ID)->to_string(),
+		fmt::format(L"received percentage: [{}] {}%", container->get_value(L"indication_id")->to_string(),
 			container->get_value(L"percentage")->to_ushort()));
 #endif
 
@@ -416,7 +421,7 @@ void transfer_condition(shared_ptr<container::value_container> container)
 #endif
 #else
 		logger::handle().write(logging_level::information,
-			fmt::format(L"completed upload: [{}]", container->get_value(INDICATION_ID)->to_string()));
+			fmt::format(L"completed upload: [{}]", container->get_value(L"indication_id")->to_string()));
 #endif
 
 		_promise_status.set_value(true);
@@ -446,7 +451,7 @@ void transfer_condition(shared_ptr<container::value_container> container)
 #endif
 #else
 		logger::handle().write(logging_level::information,
-			fmt::format(L"completed upload: [{}] success-{}, fail-{}", container->get_value(INDICATION_ID)->to_string(),
+			fmt::format(L"completed upload: [{}] success-{}, fail-{}", container->get_value(L"indication_id")->to_string(),
 				container->get_value(L"completed_count")->to_ushort(), container->get_value(L"failed_count")->to_ushort()));
 #endif
 

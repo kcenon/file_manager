@@ -619,10 +619,10 @@ void download_files(shared_ptr<container::value_container> container)
 	vector<shared_ptr<container::value>> files = container->value_array(L"file");
 	for (auto& file : files)
 	{
-		target_paths.push_back((*file)[TARGET]->to_string());
+		target_paths.push_back((*file)[L"target"]->to_string());
 	}
 
-	_file_manager->set(container->get_value(INDICATION_ID)->to_string(),
+	_file_manager->set(container->get_value(L"indication_id")->to_string(),
 		container->source_id(), container->source_sub_id(), target_paths);
 #endif
 
@@ -653,9 +653,9 @@ void download_files(shared_ptr<container::value_container> container)
 
 		_middle_server->send(start_message);
 #else
-		_middle_server->send(make_shared<container::value_container>(container->source_id(), container->source_sub_id(), TRANSFER_CONDITON,
+		_middle_server->send(make_shared<container::value_container>(container->source_id(), container->source_sub_id(), L"transfer_condition",
 			vector<shared_ptr<container::value>> {
-				make_shared<container::string_value>(INDICATION_ID, container->get_value(INDICATION_ID)->to_string()),
+				make_shared<container::string_value>(L"indication_id", container->get_value(L"indication_id")->to_string()),
 				make_shared<container::ushort_value>(L"percentage", 0)
 		}));
 #endif
@@ -746,8 +746,8 @@ void upload_files(shared_ptr<container::value_container> container)
 		(*container)[HEADER][SOURCE_SUB_ID] = json::value::string(converter::to_string(_file_line->source_sub_id()));
 #endif
 #else
-		container << make_shared<container::string_value>(GATEWAY_SOURCE_ID, container->source_id());
-		container << make_shared<container::string_value>(GATEWAY_SOURCE_SUB_ID, container->source_sub_id());
+		container << make_shared<container::string_value>(L"gateway_source_id", container->source_id());
+		container << make_shared<container::string_value>(L"gateway_source_sub_id", container->source_sub_id());
 		container->set_source(_file_line->source_id(), _file_line->source_sub_id());
 #endif
 
@@ -777,7 +777,7 @@ void uploaded_file(shared_ptr<container::value_container> container)
 #endif
 #else
 	shared_ptr<container::value_container> temp = _file_manager->received(
-		container->get_value(INDICATION_ID)->to_string(), container->get_value(L"target_path")->to_string());
+		container->get_value(L"indication_id")->to_string(), container->get_value(L"target_path")->to_string());
 #endif
 
 	if (temp != nullptr)
