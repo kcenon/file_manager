@@ -5,7 +5,13 @@ SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED True)
 SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG")
 
+OPTION(USE_UNIT_TEST "Use unit test" ON)
 OPTION(USE_TYPE_CONTAINER "Contains type container library" ON)
+
+IF(USE_UNIT_TEST)
+    ENABLE_TESTING()
+    ADD_DEFINITIONS(-D__USE_UNIT_TEST__)
+ENDIF()
 
 IF(USE_TYPE_CONTAINER)
     ADD_DEFINITIONS(-D__USE_TYPE_CONTAINER__)
@@ -22,6 +28,9 @@ ENDIF()
 ADD_SUBDIRECTORY(messaging_system/threads)
 ADD_SUBDIRECTORY(messaging_system/database)
 ADD_SUBDIRECTORY(messaging_system/network)
+IF(USE_UNIT_TEST)
+    ADD_SUBDIRECTORY(messaging_system/unittest)
+ENDIF()
 
 # cpp_samples
 ADD_SUBDIRECTORY(upload_sample)
