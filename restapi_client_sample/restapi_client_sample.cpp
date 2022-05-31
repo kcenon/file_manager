@@ -84,12 +84,13 @@ future<bool> _future_status;
 
 void get_request(void);
 void post_request(const vector<unsigned char>& data);
-bool parse_arguments(const map<wstring, wstring>& arguments);
+bool parse_arguments(argument_manager& arguments);
 void display_help(void);
 
 int main(int argc, char* argv[])
 {
-	if (!parse_arguments(argument::parse(argc, argv)))
+	argument_manager arguments(argc, argv);
+	if (!parse_arguments(arguments))
 	{
 		return 0;
 	}
@@ -310,40 +311,40 @@ void post_request(const vector<unsigned char>& data)
 	_thread_pool->push(make_shared<job>(priorities::low, &get_request));
 }
 
-bool parse_arguments(const map<wstring, wstring>& arguments)
+bool parse_arguments(argument_manager& arguments)
 {
 	wstring temp;
 
-	auto target = arguments.find(L"--help");
-	if (target != arguments.end())
+	auto target = arguments.get(L"--help");
+	if (!target.empty())
 	{
 		display_help();
 
 		return false;
 	}
 
-	target = arguments.find(L"--server_port");
-	if (target != arguments.end())
+	target = arguments.get(L"--server_port");
+	if (!target.empty())
 	{
-		server_port = (unsigned short)atoi(converter::to_string(target->second).c_str());
+		server_port = (unsigned short)atoi(converter::to_string(target).c_str());
 	}
 
-	target = arguments.find(L"--source_folder");
-	if (target != arguments.end())
+	target = arguments.get(L"--source_folder");
+	if (!target.empty())
 	{
-		source_folder = target->second;
+		source_folder = target;
 	}
 
-	target = arguments.find(L"--target_folder");
-	if (target != arguments.end())
+	target = arguments.get(L"--target_folder");
+	if (!target.empty())
 	{
-		target_folder = target->second;
+		target_folder = target;
 	}
 
-	target = arguments.find(L"--write_console_mode");
-	if (target != arguments.end())
+	target = arguments.get(L"--write_console_mode");
+	if (!target.empty())
 	{
-		temp = target->second;
+		temp = target;
 		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
 
 		if (temp.compare(L"true") == 0)
@@ -356,10 +357,10 @@ bool parse_arguments(const map<wstring, wstring>& arguments)
 		}
 	}
 
-	target = arguments.find(L"--logging_level");
-	if (target != arguments.end())
+	target = arguments.get(L"--logging_level");
+	if (!target.empty())
 	{
-		log_level = (logging_level)atoi(converter::to_string(target->second).c_str());
+		log_level = (logging_level)atoi(converter::to_string(target).c_str());
 	}
 
 	return true;
