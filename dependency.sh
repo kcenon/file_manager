@@ -1,7 +1,11 @@
-if [ -z "$(ls -A ./messaging_system)" ]
-then
+if [ -z "$(ls -A ./messaging_system)" ]; then
     git submodule update --init
 fi
-git submodule foreach "git fetch && git reset --hard origin/main"
+
+if [ ! -z "$1" ]; then
+    if [ "$1" == "--submodule" ]; then
+        git submodule foreach "git fetch && git reset --hard origin/main"
+    fi
+fi
 
 ./messaging_system/dependency.sh
