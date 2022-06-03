@@ -1,3 +1,5 @@
+[![CodeFactor](https://www.codefactor.io/repository/github/kcenon/file_manager/badge)](https://www.codefactor.io/repository/github/kcenon/file_manager)
+
 ## How to use
 
 To understand how to use this library, it provided several sample programs on the samples folder.
