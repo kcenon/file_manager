@@ -47,12 +47,10 @@ using namespace converting;
 
 file_manager::file_manager(void)
 {
-
 }
 
 file_manager::~file_manager(void)
 {
-
 }
 
 bool file_manager::set(const wstring& indication_id, const wstring& source_id, const wstring& source_sub_id, 
