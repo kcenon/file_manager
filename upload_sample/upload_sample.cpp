@@ -92,6 +92,8 @@ map<wstring, function<void(shared_ptr<json::value>)>> _registered_messages;
 map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
 #endif
 
+void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
+void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
 bool parse_arguments(argument_manager& arguments);
 void connection(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
 
@@ -202,6 +204,34 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
+void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
+{
+	auto target = arguments.get(key);
+	if (!target.empty())
+	{
+		auto temp = target;
+		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
+
+		if (temp.compare(L"true") == 0)
+		{
+			value = true;
+		}
+		else
+		{
+			value = false;
+		}
+	}
+}
+
+void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value)
+{
+	auto target = arguments.get(key);
+	if (!target.empty())
+	{
+		value = (unsigned short)atoi(converter::to_string(target).c_str());
+	}
+}
+
 bool parse_arguments(argument_manager& arguments)
 {
 	wstring temp;
@@ -214,37 +244,8 @@ bool parse_arguments(argument_manager& arguments)
 		return false;
 	}
 
-	target = arguments.get(L"--encrypt_mode");
-	if (!target.empty())
-	{
-		temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			encrypt_mode = true;
-		}
-		else
-		{
-			encrypt_mode = false;
-		}
-	}
-
-	target = arguments.get(L"--compress_mode");
-	if (!target.empty())
-	{
-		temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			compress_mode = true;
-		}
-		else
-		{
-			compress_mode = false;
-		}
-	}
+	parse_bool(L"--encrypt_mode", arguments, encrypt_mode);
+	parse_bool(L"--compress_mode", arguments, compress_mode);
 
 	target = arguments.get(L"--connection_key");
 	if (!target.empty())
@@ -262,11 +263,7 @@ bool parse_arguments(argument_manager& arguments)
 		server_ip = target;
 	}
 
-	target = arguments.get(L"--server_port");
-	if (!target.empty())
-	{
-		server_port = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
+	parse_ushort(L"--server_port", arguments, server_port);
 
 	target = arguments.get(L"--source_folder");
 	if (!target.empty())
@@ -280,39 +277,10 @@ bool parse_arguments(argument_manager& arguments)
 		target_folder = target;
 	}
 
-	target = arguments.get(L"--high_priority_count");
-	if (!target.empty())
-	{
-		high_priority_count = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-
-	target = arguments.get(L"--normal_priority_count");
-	if (!target.empty())
-	{
-		normal_priority_count = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-
-	target = arguments.get(L"--low_priority_count");
-	if (!target.empty())
-	{
-		low_priority_count = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-
-	target = arguments.get(L"--write_console_mode");
-	if (!target.empty())
-	{
-		temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			write_console = true;
-		}
-		else
-		{
-			write_console = false;
-		}
-	}
+	parse_ushort(L"--high_priority_count", arguments, high_priority_count);
+	parse_ushort(L"--normal_priority_count", arguments, normal_priority_count);
+	parse_ushort(L"--low_priority_count", arguments, low_priority_count);
+	parse_bool(L"--write_console_mode", arguments, write_console);
 
 	target = arguments.get(L"--logging_level");
 	if (!target.empty())

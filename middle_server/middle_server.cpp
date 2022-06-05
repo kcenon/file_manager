@@ -107,6 +107,9 @@ shared_ptr<messaging_server> _middle_server = nullptr;
 BOOL ctrl_handler(DWORD ctrl_type);
 #endif
 
+void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
+void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
+void parse_ulong(const wstring& key, argument_manager& arguments, unsigned long& value);
 bool parse_arguments(argument_manager& arguments);
 void create_middle_server(void);
 void create_data_line(void);
@@ -195,6 +198,43 @@ BOOL ctrl_handler(DWORD ctrl_type)
 }
 #endif
 
+void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
+{
+	auto target = arguments.get(key);
+	if (!target.empty())
+	{
+		auto temp = target;
+		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
+
+		if (temp.compare(L"true") == 0)
+		{
+			value = true;
+		}
+		else
+		{
+			value = false;
+		}
+	}
+}
+
+void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value)
+{
+	auto target = arguments.get(key);
+	if (!target.empty())
+	{
+		value = (unsigned short)atoi(converter::to_string(target).c_str());
+	}
+}
+
+void parse_ulong(const wstring& key, argument_manager& arguments, unsigned long& value)
+{
+	auto target = arguments.get(key);
+	if (!target.empty())
+	{
+		value = (unsigned long)atol(converter::to_string(target).c_str());
+	}
+}
+
 bool parse_arguments(argument_manager& arguments)
 {
 	wstring temp;
@@ -207,43 +247,9 @@ bool parse_arguments(argument_manager& arguments)
 		return false;
 	}
 
-	target = arguments.get(L"--encrypt_mode");
-	if (!target.empty())
-	{
-		temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			encrypt_mode = true;
-		}
-		else
-		{
-			encrypt_mode = false;
-		}
-	}
-
-	target = arguments.get(L"--compress_mode");
-	if (!target.empty())
-	{
-		temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			compress_mode = true;
-		}
-		else
-		{
-			compress_mode = false;
-		}
-	}
-
-	target = arguments.get(L"--compress_block_size");
-	if (!target.empty())
-	{
-		compress_block_size = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
+	parse_bool(L"--encrypt_mode", arguments, encrypt_mode);
+	parse_bool(L"--compress_mode", arguments, compress_mode);
+	parse_ushort(L"--compress_block_size", arguments, compress_block_size);
 
 	target = arguments.get(L"--main_connection_key");
 	if (!target.empty())
@@ -270,36 +276,13 @@ bool parse_arguments(argument_manager& arguments)
 	{
 		main_server_ip = target;
 	}
-
-	target = arguments.get(L"--main_server_port");
-	if (!target.empty())
-	{
-		main_server_port = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-
-	target = arguments.get(L"--middle_server_port");
-	if (!target.empty())
-	{
-		middle_server_port = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-
-	target = arguments.get(L"--high_priority_count");
-	if (!target.empty())
-	{
-		high_priority_count = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-
-	target = arguments.get(L"--normal_priority_count");
-	if (!target.empty())
-	{
-		normal_priority_count = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-
-	target = arguments.get(L"--low_priority_count");
-	if (!target.empty())
-	{
-		low_priority_count = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
+	
+	parse_ushort(L"--main_server_port", arguments, main_server_port);
+	parse_ushort(L"--middle_server_port", arguments, middle_server_port);
+	parse_ushort(L"--high_priority_count", arguments, high_priority_count);
+	parse_ushort(L"--normal_priority_count", arguments, normal_priority_count);
+	parse_ushort(L"--low_priority_count", arguments, low_priority_count);
+	parse_ulong(L"--session_limit_count", arguments, session_limit_count);
 
 	target = arguments.get(L"--session_limit_count");
 	if (!target.empty())
@@ -307,21 +290,7 @@ bool parse_arguments(argument_manager& arguments)
 		session_limit_count = (unsigned short)atoi(converter::to_string(target).c_str());
 	}
 
-	target = arguments.get(L"--write_console_mode");
-	if (!target.empty())
-	{
-		temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			write_console = true;
-		}
-		else
-		{
-			write_console = false;
-		}
-	}
+	parse_bool(L"--write_console_mode", arguments, write_console);
 
 	target = arguments.get(L"--logging_level");
 	if (!target.empty())
