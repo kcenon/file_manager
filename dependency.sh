@@ -1,3 +1,4 @@
+#!/bin/bash
 if [ -z "$(ls -A ./messaging_system)" ]; then
     git submodule update --init
 fi
@@ -8,4 +9,4 @@ if [ ! -z "$1" ]; then
     fi
 fi
 
-./messaging_system/dependency.sh
+/bin/bash ./messaging_system/dependency.sh
