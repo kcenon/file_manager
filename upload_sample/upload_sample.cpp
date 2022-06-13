@@ -207,20 +207,15 @@ int main(int argc, char* argv[])
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
 {
 	auto target = arguments.get(key);
-	if (!target.empty())
+	if (target.empty())
 	{
-		auto temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			value = true;
-		}
-		else
-		{
-			value = false;
-		}
+		return;
 	}
+
+	auto temp = target;
+	transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
+
+	value = temp.compare(L"true") == 0;
 }
 
 void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value)
@@ -229,6 +224,15 @@ void parse_ushort(const wstring& key, argument_manager& arguments, unsigned shor
 	if (!target.empty())
 	{
 		value = (unsigned short)atoi(converter::to_string(target).c_str());
+	}
+}
+
+void parse_string(const wstring& key, argument_manager& arguments, wstring& value)
+{
+	auto target = arguments.get(key);
+	if(!target.empty())
+	{
+		value = target;
 	}
 }
 
@@ -256,27 +260,11 @@ bool parse_arguments(argument_manager& arguments)
 			connection_key = temp;
 		}
 	}
-
-	target = arguments.get(L"--server_ip");
-	if (!target.empty())
-	{
-		server_ip = target;
-	}
-
+	
+	parse_string(L"--server_ip", arguments, server_ip);
 	parse_ushort(L"--server_port", arguments, server_port);
-
-	target = arguments.get(L"--source_folder");
-	if (!target.empty())
-	{
-		source_folder = target;
-	}
-
-	target = arguments.get(L"--target_folder");
-	if (!target.empty())
-	{
-		target_folder = target;
-	}
-
+	parse_string(L"--source_folder", arguments, source_folder);
+	parse_string(L"--target_folder", arguments, target_folder);
 	parse_ushort(L"--high_priority_count", arguments, high_priority_count);
 	parse_ushort(L"--normal_priority_count", arguments, normal_priority_count);
 	parse_ushort(L"--low_priority_count", arguments, low_priority_count);

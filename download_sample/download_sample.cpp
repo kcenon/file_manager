@@ -206,20 +206,15 @@ int main(int argc, char* argv[])
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
 {
 	auto target = arguments.get(key);
-	if (!target.empty())
+	if (target.empty())
 	{
-		auto temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			value = true;
-		}
-		else
-		{
-			value = false;
-		}
+		return;
 	}
+
+	auto temp = target;
+	transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
+
+	value = temp.compare(L"true") == 0;
 }
 
 void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value)

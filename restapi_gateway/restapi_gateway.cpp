@@ -124,7 +124,10 @@ BOOL ctrl_handler(DWORD ctrl_type);
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
 void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
+void parse_string(const wstring& key, argument_manager& arguments, wstring& value);
 bool parse_arguments(argument_manager& arguments);
+void display_help(void);
+
 void create_data_line(void);
 void create_http_listener(void);
 void connection(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
@@ -141,7 +144,6 @@ void transfer_files(shared_ptr<json::value> request);
 
 void get_method(http_request request);
 void post_method(http_request request);
-void display_help(void);
 
 int main(int argc, char* argv[])
 {
@@ -225,6 +227,15 @@ void parse_ushort(const wstring& key, argument_manager& arguments, unsigned shor
 	}
 }
 
+void parse_string(const wstring& key, argument_manager& arguments, wstring& value)
+{
+	auto target = arguments.get(key);
+	if(!target.empty())
+	{
+		value = target;
+	}
+}
+
 bool parse_arguments(argument_manager& arguments)
 {
 	wstring temp;
@@ -250,13 +261,8 @@ bool parse_arguments(argument_manager& arguments)
 			connection_key = temp;
 		}
 	}
-
-	target = arguments.get(L"--server_ip");
-	if (!target.empty())
-	{
-		server_ip = target;
-	}
-
+	
+	parse_string(L"--server_ip", arguments, server_ip);
 	parse_ushort(L"--server_port", arguments, server_port);
 	parse_ushort(L"--rest_port", arguments, rest_port);
 	parse_ushort(L"--high_priority_count", arguments, high_priority_count);

@@ -84,7 +84,12 @@ future<bool> _future_status;
 
 void get_request(void);
 void post_request(const vector<unsigned char>& data);
+
+void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
+void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
+void parse_string(const wstring& key, argument_manager& arguments, wstring& value);
 bool parse_arguments(argument_manager& arguments);
+
 void display_help(void);
 
 int main(int argc, char* argv[])
@@ -311,6 +316,38 @@ void post_request(const vector<unsigned char>& data)
 	_thread_pool->push(make_shared<job>(priorities::low, &get_request));
 }
 
+void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
+{
+	auto target = arguments.get(key);
+	if (target.empty())
+	{
+		return;
+	}
+
+	auto temp = target;
+	transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
+
+	value = temp.compare(L"true") == 0;
+}
+
+void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value)
+{
+	auto target = arguments.get(key);
+	if (!target.empty())
+	{
+		value = (unsigned short)atoi(converter::to_string(target).c_str());
+	}
+}
+
+void parse_string(const wstring& key, argument_manager& arguments, wstring& value)
+{
+	auto target = arguments.get(key);
+	if(!target.empty())
+	{
+		value = target;
+	}
+}
+
 bool parse_arguments(argument_manager& arguments)
 {
 	wstring temp;
@@ -322,40 +359,11 @@ bool parse_arguments(argument_manager& arguments)
 
 		return false;
 	}
-
-	target = arguments.get(L"--server_port");
-	if (!target.empty())
-	{
-		server_port = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-
-	target = arguments.get(L"--source_folder");
-	if (!target.empty())
-	{
-		source_folder = target;
-	}
-
-	target = arguments.get(L"--target_folder");
-	if (!target.empty())
-	{
-		target_folder = target;
-	}
-
-	target = arguments.get(L"--write_console_mode");
-	if (!target.empty())
-	{
-		temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			write_console = true;
-		}
-		else
-		{
-			write_console = false;
-		}
-	}
+	
+	parse_ushort(L"--server_port", arguments, server_port);
+	parse_string(L"--source_folder", arguments, source_folder);
+	parse_string(L"--target_folder", arguments, target_folder);
+	parse_bool(L"--write_console_mode", arguments, write_console);
 
 	target = arguments.get(L"--logging_level");
 	if (!target.empty())

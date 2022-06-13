@@ -110,7 +110,10 @@ BOOL ctrl_handler(DWORD ctrl_type);
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
 void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
 void parse_ulong(const wstring& key, argument_manager& arguments, unsigned long& value);
+void parse_string(const wstring& key, argument_manager& arguments, wstring& value);
 bool parse_arguments(argument_manager& arguments);
+void display_help(void);
+
 void create_middle_server(void);
 void create_data_line(void);
 void create_file_line(void);
@@ -139,8 +142,6 @@ void download_files(shared_ptr<container::value_container> container);
 void upload_files(shared_ptr<container::value_container> container);
 void uploaded_file(shared_ptr<container::value_container> container);
 #endif
-
-void display_help(void);
 
 int main(int argc, char* argv[])
 {
@@ -201,20 +202,15 @@ BOOL ctrl_handler(DWORD ctrl_type)
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
 {
 	auto target = arguments.get(key);
-	if (!target.empty())
+	if (target.empty())
 	{
-		auto temp = target;
-		transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-		if (temp.compare(L"true") == 0)
-		{
-			value = true;
-		}
-		else
-		{
-			value = false;
-		}
+		return;
 	}
+
+	auto temp = target;
+	transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
+
+	value = temp.compare(L"true") == 0;
 }
 
 void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value)
@@ -232,6 +228,15 @@ void parse_ulong(const wstring& key, argument_manager& arguments, unsigned long&
 	if (!target.empty())
 	{
 		value = (unsigned long)atol(converter::to_string(target).c_str());
+	}
+}
+
+void parse_string(const wstring& key, argument_manager& arguments, wstring& value)
+{
+	auto target = arguments.get(key);
+	if(!target.empty())
+	{
+		value = target;
 	}
 }
 
@@ -270,25 +275,14 @@ bool parse_arguments(argument_manager& arguments)
 			middle_connection_key = temp;
 		}
 	}
-
-	target = arguments.get(L"--main_server_ip");
-	if (!target.empty())
-	{
-		main_server_ip = target;
-	}
 	
+	parse_string(L"--main_server_ip", arguments, main_server_ip);
 	parse_ushort(L"--main_server_port", arguments, main_server_port);
 	parse_ushort(L"--middle_server_port", arguments, middle_server_port);
 	parse_ushort(L"--high_priority_count", arguments, high_priority_count);
 	parse_ushort(L"--normal_priority_count", arguments, normal_priority_count);
 	parse_ushort(L"--low_priority_count", arguments, low_priority_count);
 	parse_ulong(L"--session_limit_count", arguments, session_limit_count);
-
-	target = arguments.get(L"--session_limit_count");
-	if (!target.empty())
-	{
-		session_limit_count = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
 
 	parse_bool(L"--write_console_mode", arguments, write_console);
 
@@ -387,7 +381,7 @@ void received_message_from_middle_server(shared_ptr<container::value_container> 
 		return;
 	}
 
-	if (_data_line == nullptr || !_data_line->is_confirmed())
+	if (_data_line == nullptr || _data_line->get_confirom_status() == connection_conditions::confirmed)
 	{
 		if (_middle_server == nullptr)
 		{
@@ -558,7 +552,7 @@ void download_files(shared_ptr<container::value_container> container)
 		return;
 	}
 
-	if (_file_line == nullptr || !_file_line->is_confirmed())
+	if (_file_line == nullptr || _file_line->get_confirom_status() == connection_conditions::confirmed)
 	{
 		if (_middle_server)
 		{
@@ -693,7 +687,7 @@ void upload_files(shared_ptr<container::value_container> container)
 		return;
 	}
 
-	if (_file_line == nullptr || !_file_line->is_confirmed())
+	if (_file_line == nullptr || _file_line->get_confirom_status() == connection_conditions::confirmed)
 	{
 		if (_middle_server)
 		{
