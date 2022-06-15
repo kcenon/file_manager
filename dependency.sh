@@ -6,6 +6,7 @@ fi
 if [ ! -z "$1" ]; then
     if [ "$1" == "--submodule" ]; then
         git submodule foreach "git fetch && git reset --hard origin/main"
+        git submodule update --remote
     fi
 fi
 
