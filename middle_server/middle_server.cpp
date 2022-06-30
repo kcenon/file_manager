@@ -109,7 +109,11 @@ BOOL ctrl_handler(DWORD ctrl_type);
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
 void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
+#ifdef _WIN32
+void parse_ullong(const wstring& key, argument_manager& arguments, unsigned long long& value);
+#else
 void parse_ulong(const wstring& key, argument_manager& arguments, unsigned long& value);
+#endif
 void parse_string(const wstring& key, argument_manager& arguments, wstring& value);
 bool parse_arguments(argument_manager& arguments);
 void display_help(void);
@@ -222,12 +226,20 @@ void parse_ushort(const wstring& key, argument_manager& arguments, unsigned shor
 	}
 }
 
+#ifdef _WIN32
+void parse_ullong(const wstring& key, argument_manager& arguments, unsigned long long& value)
+#else
 void parse_ulong(const wstring& key, argument_manager& arguments, unsigned long& value)
+#endif
 {
 	auto target = arguments.get(key);
 	if (!target.empty())
 	{
+#ifdef _WIN32
+		value = (unsigned long long)atoll(converter::to_string(target).c_str());
+#else
 		value = (unsigned long)atol(converter::to_string(target).c_str());
+#endif
 	}
 }
 
@@ -282,7 +294,11 @@ bool parse_arguments(argument_manager& arguments)
 	parse_ushort(L"--high_priority_count", arguments, high_priority_count);
 	parse_ushort(L"--normal_priority_count", arguments, normal_priority_count);
 	parse_ushort(L"--low_priority_count", arguments, low_priority_count);
+#ifdef _WIN32
+	parse_ullong(L"--session_limit_count", arguments, session_limit_count);
+#else
 	parse_ulong(L"--session_limit_count", arguments, session_limit_count);
+#endif
 
 	parse_bool(L"--write_console_mode", arguments, write_console);
 
@@ -381,7 +397,7 @@ void received_message_from_middle_server(shared_ptr<container::value_container> 
 		return;
 	}
 
-	if (_data_line == nullptr || _data_line->get_confirom_status() == connection_conditions::confirmed)
+	if (_data_line == nullptr || _data_line->get_confirm_status() == connection_conditions::confirmed)
 	{
 		if (_middle_server == nullptr)
 		{
@@ -552,7 +568,7 @@ void download_files(shared_ptr<container::value_container> container)
 		return;
 	}
 
-	if (_file_line == nullptr || _file_line->get_confirom_status() == connection_conditions::confirmed)
+	if (_file_line == nullptr || _file_line->get_confirm_status() == connection_conditions::confirmed)
 	{
 		if (_middle_server)
 		{
@@ -687,7 +703,7 @@ void upload_files(shared_ptr<container::value_container> container)
 		return;
 	}
 
-	if (_file_line == nullptr || _file_line->get_confirom_status() == connection_conditions::confirmed)
+	if (_file_line == nullptr || _file_line->get_confirm_status() == connection_conditions::confirmed)
 	{
 		if (_middle_server)
 		{
