@@ -15,4 +15,6 @@ cp ./build/bin/unittest ./bin/unittest
 
 rm -rf build
 
-./bin/unittest
+if [ ! -f "./bin/unittest" ]; then
+    ./bin/unittest
+fi

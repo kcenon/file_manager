@@ -89,9 +89,7 @@ size_t session_limit_count = 0;
 shared_ptr<file_manager> _file_manager = nullptr;
 shared_ptr<messaging_server> _main_server = nullptr;
 
-#ifdef _CONSOLE
-BOOL ctrl_handler(DWORD ctrl_type);
-#endif
+void signal_callback(int signum); 
 
 map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
 
@@ -120,9 +118,12 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-#ifdef _CONSOLE
-	SetConsoleCtrlHandler((PHANDLER_ROUTINE)ctrl_handler, TRUE);
-#endif
+	signal(SIGINT, signal_callback);
+	signal(SIGILL, signal_callback);
+	signal(SIGABRT, signal_callback);
+	signal(SIGFPE, signal_callback);
+	signal(SIGSEGV, signal_callback);
+	signal(SIGTERM, signal_callback);
 
 	logger::handle().set_write_console(write_console, write_console_only);
 	logger::handle().set_target_level(log_level);
@@ -142,25 +143,12 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-#ifdef _CONSOLE
-BOOL ctrl_handler(DWORD ctrl_type)
-{
-	switch (ctrl_type)
-	{
-	case CTRL_C_EVENT:
-	case CTRL_CLOSE_EVENT:
-	case CTRL_LOGOFF_EVENT:
-	case CTRL_SHUTDOWN_EVENT:
-	case CTRL_BREAK_EVENT:
-		_main_server.reset();
+void signal_callback(int signum) 
+{	
+	_main_server.reset();
 
-		logger::handle().stop();
-		break;
-	}
-
-	return FALSE;
+	logger::handle().stop();
 }
-#endif
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
 {

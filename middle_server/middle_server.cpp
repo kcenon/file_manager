@@ -96,9 +96,7 @@ shared_ptr<messaging_client> _data_line = nullptr;
 shared_ptr<messaging_client> _file_line = nullptr;
 shared_ptr<messaging_server> _middle_server = nullptr;
 
-#ifdef _CONSOLE
-BOOL ctrl_handler(DWORD ctrl_type);
-#endif
+void signal_callback(int signum); 
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
 void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
@@ -134,10 +132,13 @@ int main(int argc, char* argv[])
 	{
 		return 0;
 	}
-
-#ifdef _CONSOLE
-	SetConsoleCtrlHandler((PHANDLER_ROUTINE)ctrl_handler, TRUE);
-#endif
+	
+	signal(SIGINT, signal_callback);
+	signal(SIGILL, signal_callback);
+	signal(SIGABRT, signal_callback);
+	signal(SIGFPE, signal_callback);
+	signal(SIGSEGV, signal_callback);
+	signal(SIGTERM, signal_callback);
 
 	_file_commands.insert({ L"download_files", &download_files });
 	_file_commands.insert({ L"upload_files", &upload_files });
@@ -159,29 +160,14 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-#ifdef _CONSOLE
-BOOL ctrl_handler(DWORD ctrl_type)
-{
-	switch (ctrl_type)
-	{
-	case CTRL_C_EVENT:
-	case CTRL_CLOSE_EVENT:
-	case CTRL_LOGOFF_EVENT:
-	case CTRL_SHUTDOWN_EVENT:
-	case CTRL_BREAK_EVENT:
-		{
-			_middle_server.reset();
-			_data_line.reset();
-			_file_line.reset();
+void signal_callback(int signum) 
+{	
+	_middle_server.reset();
+	_data_line.reset();
+	_file_line.reset();
 
-			logger::handle().stop();
-		}
-		break;
-	}
-
-	return FALSE;
+	logger::handle().stop();
 }
-#endif
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
 {
