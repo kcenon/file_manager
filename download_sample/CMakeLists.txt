@@ -15,11 +15,7 @@ PROJECT(${PROGRAM_NAME})
 ADD_EXECUTABLE(${PROGRAM_NAME} download_sample.cpp)
 
 INCLUDE_DIRECTORIES(../messaging_system/utilities)
-
-IF(USE_TYPE_CONTAINER)
-	INCLUDE_DIRECTORIES(../messaging_system/container)
-ENDIF()
-
+INCLUDE_DIRECTORIES(../messaging_system/container)
 INCLUDE_DIRECTORIES(../messaging_system/threads)
 INCLUDE_DIRECTORIES(../messaging_system/network)
 

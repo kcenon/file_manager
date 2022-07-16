@@ -66,6 +66,7 @@ using namespace web::http;
 using namespace web::http::client;
 
 bool write_console = false;
+bool write_console_only = false;
 
 #ifdef _DEBUG
 logging_level log_level = logging_level::parameter;
@@ -133,8 +134,8 @@ int main(int argc, char* argv[])
 	container[MESSAGE_TYPE] = json::value::string(L"download_files");
 	container[INDICATION_ID] = json::value::string(L"download_test");
 #else
-	container[MESSAGE_TYPE] = json::value::string("download_files");
-	container[INDICATION_ID] = json::value::string("download_test");
+	container[converter::to_string(MESSAGE_TYPE)] = json::value::string("download_files");
+	container[converter::to_string(INDICATION_ID)] = json::value::string("download_test");
 #endif
 
 	int index = 0;
@@ -147,11 +148,11 @@ int main(int argc, char* argv[])
 		index++;
 	}
 #else
-	container[FILES] = json::value::array();
+	container[converter::to_string(FILES)] = json::value::array();
 	for (auto& source : sources)
 	{
-		container[FILES][index][SOURCE] = json::value::string(converter::to_string(source));
-		container[FILES][index][TARGET] = json::value::string(converter::to_string(converter::replace2(source, source_folder, target_folder)));
+		container[converter::to_string(FILES)][index][converter::to_string(SOURCE)] = json::value::string(converter::to_string(source));
+		container[converter::to_string(FILES)][index][converter::to_string(TARGET)] = json::value::string(converter::to_string(converter::replace2(source, source_folder, target_folder)));
 		index++;
 	}
 #endif
@@ -246,14 +247,16 @@ void get_request(void)
 					if (message["percentage"].as_integer() == 0)
 					{
 						logger::handle().write(logging_level::information,
-							converter::to_wstring(fmt::format("started {}: [{}]", message[MESSAGE_TYPE].as_string(),
-								message[INDICATION_ID].as_string())));
+							converter::to_wstring(fmt::format("started {}: [{}]", 
+								message[converter::to_string(MESSAGE_TYPE)].as_string(),
+								message[converter::to_string(INDICATION_ID)].as_string())));
 						
 						continue;
 					}
 
 					logger::handle().write(logging_level::information,
-						converter::to_wstring(fmt::format("received percentage: [{}] {}%", message[INDICATION_ID].as_string(),
+						converter::to_wstring(fmt::format("received percentage: [{}] {}%", 
+							message[converter::to_string(INDICATION_ID)].as_string(),
 							message["percentage"].as_integer())));
 
 					if (message["percentage"].as_integer() != 100)
@@ -264,8 +267,9 @@ void get_request(void)
 					if (message["completed"].as_bool())
 					{
 						logger::handle().write(logging_level::information,
-							converter::to_wstring(fmt::format("completed {}: [{}]", message[MESSAGE_TYPE].as_string(),
-								message[INDICATION_ID].as_string())));
+							converter::to_wstring(fmt::format("completed {}: [{}]", 
+								message[converter::to_string(MESSAGE_TYPE)].as_string(),
+								message[converter::to_string(INDICATION_ID)].as_string())));
 					
 						_promise_status.set_value(true);
 
@@ -273,8 +277,12 @@ void get_request(void)
 					}
 
 					logger::handle().write(logging_level::information,
-						converter::to_wstring(fmt::format("cannot complete {}: [{}]", message[MESSAGE_TYPE].as_string(),
-							message[INDICATION_ID].as_string())));
+						converter::to_wstring(
+							fmt::format("cannot complete {}: [{}]", 
+								message[converter::to_string(MESSAGE_TYPE)].as_string(),
+								message[converter::to_string(INDICATION_ID)].as_string())
+							)
+						);
 
 					_promise_status.set_value(false);
 
@@ -363,7 +371,9 @@ bool parse_arguments(argument_manager& arguments)
 	parse_ushort(L"--server_port", arguments, server_port);
 	parse_string(L"--source_folder", arguments, source_folder);
 	parse_string(L"--target_folder", arguments, target_folder);
-	parse_bool(L"--write_console_mode", arguments, write_console);
+	
+	parse_bool(L"--write_console", arguments, write_console);
+	parse_bool(L"--write_console_only", arguments, write_console_only);
 
 	target = arguments.get(L"--logging_level");
 	if (!target.empty())

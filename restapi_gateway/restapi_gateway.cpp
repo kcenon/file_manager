@@ -40,14 +40,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "messaging_client.h"
 #include "argument_parser.h"
 
-#ifdef __USE_TYPE_CONTAINER__
 #include "container.h"
 #include "value.h"
 #include "values/bool_value.h"
 #include "values/ushort_value.h"
 #include "values/string_value.h"
 #include "values/container_value.h"
-#endif
 
 #ifdef _CONSOLE
 #include <Windows.h>
@@ -72,10 +70,7 @@ using namespace converting;
 using namespace compressing;
 using namespace file_handler;
 using namespace argument_parser;
-
-#ifdef __USE_TYPE_CONTAINER__
 using namespace container;
-#endif
 
 using namespace web;
 using namespace web::http;
@@ -86,6 +81,7 @@ bool write_console = true;
 #else
 bool write_console = false;
 #endif
+bool write_console_only = false;
 bool encrypt_mode = false;
 bool compress_mode = true;
 unsigned short compress_block_size = 1024;
@@ -109,14 +105,8 @@ shared_ptr<messaging_client> _data_line = nullptr;
 shared_ptr<http_listener> _http_listener = nullptr;
 
 map<wstring, vector<shared_ptr<json::value>>> _messages;
-
-#ifdef __USE_TYPE_CONTAINER__
-map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
-#else
-map<wstring, function<void(shared_ptr<json::value>)>> _registered_messages;
-#endif
-
 map<wstring, function<void(shared_ptr<json::value>)>> _registered_restapi;
+map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
 
 #ifdef _CONSOLE
 BOOL ctrl_handler(DWORD ctrl_type);
@@ -132,13 +122,8 @@ void create_data_line(void);
 void create_http_listener(void);
 void connection(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
 
-#ifdef __USE_TYPE_CONTAINER__
 void received_message(shared_ptr<container::value_container> container);
 void transfer_condition(shared_ptr<container::value_container> container);
-#else
-void received_message(shared_ptr<json::value> container);
-void transfer_condition(shared_ptr<json::value> container);
-#endif
 
 void transfer_files(shared_ptr<json::value> request);
 
@@ -268,7 +253,9 @@ bool parse_arguments(argument_manager& arguments)
 	parse_ushort(L"--high_priority_count", arguments, high_priority_count);
 	parse_ushort(L"--normal_priority_count", arguments, normal_priority_count);
 	parse_ushort(L"--low_priority_count", arguments, low_priority_count);
-	parse_bool(L"--write_console_mode", arguments, write_console);
+	
+	parse_bool(L"--write_console", arguments, write_console);
+	parse_bool(L"--write_console_only", arguments, write_console_only);
 
 	target = arguments.get(L"--logging_level");
 	if (!target.empty())
@@ -336,26 +323,14 @@ void connection(const wstring& target_id, const wstring& target_sub_id, const bo
 	_data_line->start(server_ip, server_port, high_priority_count, normal_priority_count, low_priority_count);
 }
 
-#ifdef __USE_TYPE_CONTAINER__
 void received_message(shared_ptr<container::value_container> container)
-#else
-void received_message(shared_ptr<json::value> container)
-#endif
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-#ifdef __USE_TYPE_CONTAINER__
 	auto message_type = _registered_messages.find(container->message_type());
-#else
-#ifdef _WIN32
-	auto message_type = _registered_messages.find((*container)[HEADER][MESSAGE_TYPE].as_string());
-#else
-	auto message_type = _registered_messages.find(converter::to_wstring((*container)[HEADER][MESSAGE_TYPE].as_string()));
-#endif
-#endif
 	if (message_type != _registered_messages.end())
 	{
 		message_type->second(container);
@@ -363,37 +338,17 @@ void received_message(shared_ptr<json::value> container)
 		return;
 	}
 
-#ifdef __USE_TYPE_CONTAINER__
 	logger::handle().write(logging_level::sequence, fmt::format(L"unknown message: {}", container->serialize()));
-#else
-#ifdef _WIN32
-	logger::handle().write(logging_level::sequence, fmt::format(L"unknown message: {}", container->serialize()));
-#else
-	logger::handle().write(logging_level::sequence, converter::to_wstring(fmt::format("unknown message: {}", container->serialize())));
-#endif
-#endif
 }
 
-#ifdef __USE_TYPE_CONTAINER__
 void transfer_condition(shared_ptr<container::value_container> container)
-#else
-void transfer_condition(shared_ptr<json::value> container)
-#endif
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-#ifdef __USE_TYPE_CONTAINER__
 	if (container->message_type() != L"transfer_condition")
-#else
-#ifdef _WIN32
-	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != TRANSFER_CONDITON)
-#else
-	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != TRANSFER_CONDITON)
-#endif
-#endif
 	{
 		return;
 	}
@@ -401,7 +356,6 @@ void transfer_condition(shared_ptr<json::value> container)
 	wstring indication_id = L"";
 	shared_ptr<json::value> condition = make_shared<json::value>(json::value::object(true));
 
-#ifdef __USE_TYPE_CONTAINER__
 	indication_id = container->get_value(L"indication_id")->to_string();
 
 #ifdef _WIN32
@@ -415,25 +369,7 @@ void transfer_condition(shared_ptr<json::value> container)
 	(*condition)["percentage"] = json::value::number(container->get_value(L"percentage")->to_ushort());
 	(*condition)["completed"] = json::value::boolean(container->get_value(L"completed")->to_boolean());
 #endif
-#else
-#ifdef _WIN32
-	indication_id = (*container)[DATA][INDICATION_ID].as_string();
 
-	(*condition)[MESSAGE_TYPE] = (*container)[HEADER][MESSAGE_TYPE];
-	(*condition)[INDICATION_ID] = (*container)[DATA][INDICATION_ID];
-	(*condition)[L"percentage"] = (*container)[DATA][L"percentage"];
-	(*condition)[L"completed"] = (*container)[DATA][L"completed"].is_null() ?
-		json::value::boolean(false) : (*container)[DATA][L"completed"];
-#else
-	indication_id = converter::to_wstring((*container)[DATA][INDICATION_ID].as_string());
-
-	(*condition)[MESSAGE_TYPE] = (*container)[HEADER][MESSAGE_TYPE];
-	(*condition)[INDICATION_ID] = (*container)[DATA][INDICATION_ID];
-	(*condition)["percentage"] = (*container)[DATA]["percentage"];
-	(*condition)["completed"] = (*container)[DATA]["completed"].is_null() ?
-		json::value::boolean(false) : (*container)[DATA]["completed"];
-#endif
-#endif
 	auto indication = _messages.find(indication_id);
 	if (indication == _messages.end())
 	{
@@ -449,44 +385,9 @@ void transfer_files(shared_ptr<json::value> request)
 #ifdef _WIN32
 	auto& file_array = (*request)[FILES].as_array();
 #else
-	auto& file_array = (*request)[FILES].as_array();
+	auto& file_array = (*request)[converter::to_string(FILES)].as_array();
 #endif
 
-#ifndef __USE_TYPE_CONTAINER__
-	shared_ptr<json::value> container = make_shared<json::value>(json::value::object(true));
-
-#ifdef _WIN32
-	(*container)[HEADER][TARGET_ID] = json::value::string(L"main_server");
-	(*container)[HEADER][TARGET_SUB_ID] = json::value::string(L"");
-	(*container)[HEADER][MESSAGE_TYPE] = (*request)[MESSAGE_TYPE];
-
-	(*container)[DATA][INDICATION_ID] = (*request)[INDICATION_ID];
-
-	int index = 0;
-	(*container)[DATA][FILES] = json::value::array();
-	for (auto& file : file_array)
-	{
-		(*container)[DATA][FILES][index][SOURCE] = file[SOURCE];
-		(*container)[DATA][FILES][index][TARGET] = file[TARGET];
-		index++;
-	}
-#else
-	(*container)[HEADER][TARGET_ID] = json::value::string("main_server");
-	(*container)[HEADER][TARGET_SUB_ID] = json::value::string("");
-	(*container)[HEADER][MESSAGE_TYPE] = (*request)[MESSAGE_TYPE];
-
-	(*container)[DATA][INDICATION_ID] = (*request)[INDICATION_ID];
-
-	int index = 0;
-	(*container)[DATA][FILES] = json::value::array();
-	for (auto& file : file_array)
-	{
-		(*container)[DATA][FILES][index][SOURCE] = file[SOURCE];
-		(*container)[DATA][FILES][index][TARGET] = file[TARGET];
-		index++;
-	}
-#endif
-#else
 	vector<shared_ptr<container::value>> files;
 
 #ifdef _WIN32
@@ -502,8 +403,8 @@ void transfer_files(shared_ptr<json::value> request)
 			make_shared<container::string_value>(L"source", file[SOURCE].as_string()),
 			make_shared<container::string_value>(L"target", file[TARGET].as_string())
 #else
-			make_shared<container::string_value>(L"source", converter::to_wstring(file[SOURCE].as_string())),
-			make_shared<container::string_value>(L"target", converter::to_wstring(file[TARGET].as_string()))
+			make_shared<container::string_value>(L"source", converter::to_wstring(file[converter::to_string(SOURCE)].as_string())),
+			make_shared<container::string_value>(L"target", converter::to_wstring(file[converter::to_string(TARGET)].as_string()))
 #endif
 		}));
 	}
@@ -512,8 +413,7 @@ void transfer_files(shared_ptr<json::value> request)
 #ifdef _WIN32
 		make_shared<container::value_container>(L"main_server", L"", (*request)[MESSAGE_TYPE].as_string(), files);
 #else
-		make_shared<container::value_container>(L"main_server", L"", converter::to_wstring((*request)[MESSAGE_TYPE].as_string()), files);
-#endif
+		make_shared<container::value_container>(L"main_server", L"", converter::to_wstring((*request)[converter::to_string(MESSAGE_TYPE)].as_string()), files);
 #endif
 
 	_data_line->send(container);
@@ -530,7 +430,7 @@ void get_method(http_request request)
 #ifdef _WIN32
 	auto indication = _messages.find(request.headers()[INDICATION_ID]);
 #else
-	auto indication = _messages.find(converter::to_wstring(request.headers()[INDICATION_ID]));
+	auto indication = _messages.find(converter::to_wstring(request.headers()[converter::to_string(INDICATION_ID)]));
 #endif
 	if (indication == _messages.end())
 	{
@@ -577,8 +477,8 @@ void get_method(http_request request)
 		answer[L"messages"][index][L"percentage"] = (*message)[L"percentage"];
 		answer[L"messages"][index][L"completed"] = (*message)[L"completed"];
 #else
-		answer["messages"][index][MESSAGE_TYPE] = (*message)[MESSAGE_TYPE];
-		answer["messages"][index][INDICATION_ID] = (*message)[INDICATION_ID];
+		answer["messages"][index][converter::to_string(MESSAGE_TYPE)] = (*message)[converter::to_string(MESSAGE_TYPE)];
+		answer["messages"][index][converter::to_string(INDICATION_ID)] = (*message)[converter::to_string(INDICATION_ID)];
 		answer["messages"][index]["percentage"] = (*message)["percentage"];
 		answer["messages"][index]["completed"] = (*message)["completed"];
 #endif
@@ -607,7 +507,7 @@ void post_method(http_request request)
 #ifdef _WIN32
 	auto message_type = _registered_restapi.find(action[MESSAGE_TYPE].as_string());
 #else
-	auto message_type = _registered_restapi.find(converter::to_wstring(action[MESSAGE_TYPE].as_string()));
+	auto message_type = _registered_restapi.find(converter::to_wstring(action[converter::to_string(MESSAGE_TYPE)].as_string()));
 #endif
 	if (message_type != _registered_restapi.end())
 	{

@@ -40,13 +40,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "file_manager.h"
 #include "argument_parser.h"
 
-#ifndef __USE_TYPE_CONTAINER__
-#include "cpprest/json.h"
-#else
 #include "value.h"
 #include "values/ushort_value.h"
 #include "values/string_value.h"
-#endif
 
 #include <wchar.h>
 #include <algorithm>
@@ -74,6 +70,7 @@ bool write_console = true;
 #else
 bool write_console = false;
 #endif
+bool write_console_only = false;
 bool encrypt_mode = false;
 bool compress_mode = true;
 unsigned short compress_block_size = 1024;
@@ -96,11 +93,7 @@ shared_ptr<messaging_server> _main_server = nullptr;
 BOOL ctrl_handler(DWORD ctrl_type);
 #endif
 
-#ifndef __USE_TYPE_CONTAINER__
-map<wstring, function<void(shared_ptr<json::value>)>> _registered_messages;
-#else
 map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
-#endif
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
 void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
@@ -113,15 +106,9 @@ bool parse_arguments(argument_manager& arguments);
 void create_main_server(void);
 void connection(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
 
-#ifndef __USE_TYPE_CONTAINER__
-void received_message(shared_ptr<json::value> container);
-void transfer_file(shared_ptr<json::value> container);
-void upload_files(shared_ptr<json::value> container);
-#else
 void received_message(shared_ptr<container::value_container> container);
 void transfer_file(shared_ptr<container::value_container> container);
 void upload_files(shared_ptr<container::value_container> container);
-#endif
 
 void received_file(const wstring& source_id, const wstring& source_sub_id, const wstring& indication_id, const wstring& target_path);
 void display_help(void);
@@ -138,7 +125,7 @@ int main(int argc, char* argv[])
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)ctrl_handler, TRUE);
 #endif
 
-	logger::handle().set_write_console(write_console);
+	logger::handle().set_write_console(write_console, write_console_only);
 	logger::handle().set_target_level(log_level);
 	logger::handle().start(PROGRAM_NAME);
 
@@ -251,7 +238,8 @@ bool parse_arguments(argument_manager& arguments)
 #else
 	parse_ulong(L"--session_limit_count", arguments, session_limit_count);
 #endif
-	parse_bool(L"--write_console_mode", arguments, write_console);
+	parse_bool(L"--write_console", arguments, write_console);
+	parse_bool(L"--write_console_only", arguments, write_console_only);
 
 	target = arguments.get(L"--logging_level");
 	if (!target.empty())
@@ -287,26 +275,14 @@ void connection(const wstring& target_id, const wstring& target_sub_id, const bo
 		fmt::format(L"a client on main server: {}[{}] is {}", target_id, target_sub_id, condition ? L"connected" : L"disconnected"));
 }
 
-#ifndef __USE_TYPE_CONTAINER__
-void received_message(shared_ptr<json::value> container)
-#else
 void received_message(shared_ptr<container::value_container> container)
-#endif
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	auto message_type = _registered_messages.find((*container)[HEADER][MESSAGE_TYPE].as_string());
-#else
-	auto message_type = _registered_messages.find(converter::to_wstring((*container)[HEADER][MESSAGE_TYPE].as_string()));
-#endif
-#else
 	auto message_type = _registered_messages.find(container->message_type());
-#endif
 	if (message_type != _registered_messages.end())
 	{
 		message_type->second(container);
@@ -314,40 +290,18 @@ void received_message(shared_ptr<container::value_container> container)
 		return;
 	}
 
-#ifdef __USE_TYPE_CONTAINER__
 	logger::handle().write(logging_level::information,
 		fmt::format(L"received message: {}", container->serialize()));
-#else
-#ifdef _WIN32
-	logger::handle().write(logging_level::information,
-		fmt::format(L"received message: {}", container->serialize()));
-#else
-	logger::handle().write(logging_level::information,
-		converter::to_wstring(fmt::format("received message: {}", container->serialize())));
-#endif
-#endif
 }
 
-#ifndef __USE_TYPE_CONTAINER__
-void transfer_file(shared_ptr<json::value> container)
-#else
 void transfer_file(shared_ptr<container::value_container> container)
-#endif
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != L"transfer_file")
-#else
-	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != "transfer_file")
-#endif
-#else
 	if (container->message_type() != L"transfer_file")
-#endif
 	{
 		return;
 	}
@@ -360,55 +314,20 @@ void transfer_file(shared_ptr<container::value_container> container)
 	}
 }
 
-#ifndef __USE_TYPE_CONTAINER__
-void upload_files(shared_ptr<json::value> container)
-#else
 void upload_files(shared_ptr<container::value_container> container)
-#endif
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != L"upload_files")
-#else
-	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != "upload_files")
-#endif
-#else
 	if (container->message_type() != L"upload_files")
-#endif
 	{
 		return;
 	}
 
 	vector<wstring> target_paths;
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	auto& files = (*container)[DATA][FILES].as_array();
-	for (int index = 0; index < files.size(); ++index)
-	{
-		target_paths.push_back(files[index][TARGET].as_string());
-	}
-
-	_file_manager->set((*container)[DATA][INDICATION_ID].as_string(),
-		(*container)[DATA][GATEWAY_SOURCE_ID].as_string(),
-		(*container)[DATA][GATEWAY_SOURCE_SUB_ID].as_string(), target_paths);
-#else
-	auto& files = (*container)[DATA][FILES].as_array();
-	for (int index = 0; index < files.size(); ++index)
-	{
-		target_paths.push_back(converter::to_wstring(files[index][TARGET].as_string()));
-	}
-
-	_file_manager->set(converter::to_wstring((*container)[DATA][INDICATION_ID].as_string()),
-		converter::to_wstring((*container)[DATA][GATEWAY_SOURCE_ID].as_string()),
-		converter::to_wstring((*container)[DATA][GATEWAY_SOURCE_SUB_ID].as_string()), target_paths);
-#endif
-#else
 	vector<shared_ptr<container::value>> files = container->value_array(L"file");
 	for (auto& file : files)
 	{
@@ -418,35 +337,9 @@ void upload_files(shared_ptr<container::value_container> container)
 	_file_manager->set(container->get_value(L"indication_id")->to_string(),
 		container->get_value(L"gateway_source_id")->to_string(),
 		container->get_value(L"gateway_source_sub_id")->to_string(), target_paths);
-#endif
 
 	if (_main_server)
 	{
-#ifndef __USE_TYPE_CONTAINER__
-		shared_ptr<json::value> start_message = make_shared<json::value>(json::value::object(true));
-
-#ifdef _WIN32
-		(*start_message)[HEADER][SOURCE_ID] = json::value::string(L"");
-		(*start_message)[HEADER][SOURCE_SUB_ID] = json::value::string(L"");
-		(*start_message)[HEADER][TARGET_ID] = (*container)[DATA][GATEWAY_SOURCE_ID];
-		(*start_message)[HEADER][TARGET_SUB_ID] = (*container)[DATA][GATEWAY_SOURCE_SUB_ID];
-		(*start_message)[HEADER][MESSAGE_TYPE] = json::value::string(TRANSFER_CONDITON);
-
-		(*start_message)[DATA][INDICATION_ID] = (*container)[DATA][INDICATION_ID];
-		(*start_message)[DATA][L"percentage"] = json::value::number(0);
-#else
-		(*start_message)[HEADER][SOURCE_ID] = json::value::string("");
-		(*start_message)[HEADER][SOURCE_SUB_ID] = json::value::string("");
-		(*start_message)[HEADER][TARGET_ID] = (*container)[DATA][GATEWAY_SOURCE_ID];
-		(*start_message)[HEADER][TARGET_SUB_ID] = (*container)[DATA][GATEWAY_SOURCE_SUB_ID];
-		(*start_message)[HEADER][MESSAGE_TYPE] = json::value::string(TRANSFER_CONDITON);
-
-		(*start_message)[DATA][INDICATION_ID] = (*container)[DATA][INDICATION_ID];
-		(*start_message)[DATA]["percentage"] = json::value::number(0);
-#endif
-
-		_main_server->send(start_message, session_types::file_line);
-#else
 		_main_server->send(make_shared<container::value_container>(
 			container->get_value(L"gatway_source_id")->to_string(), 
 			container->get_value(L"gatway_source_sub_id")->to_string(),
@@ -455,33 +348,12 @@ void upload_files(shared_ptr<container::value_container> container)
 				make_shared<container::string_value>(L"indication_id", container->get_value(L"indication_id")->to_string()),
 				make_shared<container::ushort_value>(L"percentage", 0)
 		}), session_types::file_line);
-#endif
 	}
 
-#ifndef __USE_TYPE_CONTAINER__
-	shared_ptr<json::value> temp = make_shared<json::value>(json::value::parse(container->serialize()));
-
-#ifdef _WIN32
-	(*temp)[HEADER][SOURCE_ID] = (*container)[HEADER][TARGET_ID];
-	(*temp)[HEADER][SOURCE_SUB_ID] = (*container)[HEADER][TARGET_SUB_ID];
-	(*temp)[HEADER][TARGET_ID] = (*container)[HEADER][SOURCE_ID];
-	(*temp)[HEADER][TARGET_SUB_ID] = (*container)[HEADER][SOURCE_SUB_ID];
-
-	(*temp)[HEADER][MESSAGE_TYPE] = json::value::string(L"request_files");
-#else
-	(*temp)[HEADER][SOURCE_ID] = (*container)[HEADER][TARGET_ID];
-	(*temp)[HEADER][SOURCE_SUB_ID] = (*container)[HEADER][TARGET_SUB_ID];
-	(*temp)[HEADER][TARGET_ID] = (*container)[HEADER][SOURCE_ID];
-	(*temp)[HEADER][TARGET_SUB_ID] = (*container)[HEADER][SOURCE_SUB_ID];
-
-	(*temp)[HEADER][MESSAGE_TYPE] = json::value::string("request_files");
-#endif
-#else
 	shared_ptr<container::value_container> temp = container->copy();
 	temp->swap_header();
 
 	temp->set_message_type(L"request_files");
-#endif
 
 	if (_main_server)
 	{
@@ -494,11 +366,7 @@ void received_file(const wstring& target_id, const wstring& target_sub_id, const
 	logger::handle().write(logging_level::parameter,
 		fmt::format(L"target_id: {}, target_sub_id: {}, indication_id: {}, file_path: {}", target_id, target_sub_id, indication_id, target_path));
 
-#ifndef __USE_TYPE_CONTAINER__
-	shared_ptr<json::value> container = _file_manager->received(indication_id, target_path);
-#else
 	shared_ptr<container::value_container> container = _file_manager->received(indication_id, target_path);
-#endif
 
 	if (container != nullptr)
 	{

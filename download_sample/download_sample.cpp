@@ -39,13 +39,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "folder_handler.h"
 #include "argument_parser.h"
 
-#ifndef __USE_TYPE_CONTAINER__
-#include "cpprest/json.h"
-#else
 #include "container.h"
 #include "values/string_value.h"
 #include "values/container_value.h"
-#endif
 
 #include "fmt/xchar.h"
 #include "fmt/format.h"
@@ -66,6 +62,7 @@ bool write_console = true;
 #else
 bool write_console = false;
 #endif
+bool write_console_only = false;
 bool encrypt_mode = false;
 bool compress_mode = true;
 #ifdef _DEBUG
@@ -85,24 +82,15 @@ unsigned short low_priority_count = 3;
 promise<bool> _promise_status;
 future<bool> _future_status;
 
-#ifndef __USE_TYPE_CONTAINER__
-map<wstring, function<void(shared_ptr<json::value>)>> _registered_messages;
-#else
 map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
-#endif
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
 void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
 bool parse_arguments(argument_manager& arguments);
 void connection(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
 
-#ifndef __USE_TYPE_CONTAINER__
-void received_message(shared_ptr<json::value> container);
-void transfer_condition(shared_ptr<json::value> container);
-#else
 void received_message(shared_ptr<container::value_container> container);
 void transfer_condition(shared_ptr<container::value_container> container);
-#endif
 
 void display_help(void);
 
@@ -138,43 +126,6 @@ int main(int argc, char* argv[])
 	client->set_message_notification(&received_message);
 	client->start(server_ip, server_port, high_priority_count, normal_priority_count, low_priority_count);
 
-#ifndef __USE_TYPE_CONTAINER__
-	shared_ptr<json::value> container = make_shared<json::value>(json::value::object(true));
-
-#ifdef _WIN32
-	(*container)[HEADER][TARGET_ID] = json::value::string(L"main_server");
-	(*container)[HEADER][TARGET_SUB_ID] = json::value::string(L"");
-	(*container)[HEADER][MESSAGE_TYPE] = json::value::string(L"download_files");
-
-	(*container)[DATA][INDICATION_ID] = json::value::string(L"download_test");
-
-	int index = 0;
-	(*container)[DATA][FILES] = json::value::array();
-	for (auto& source : sources)
-	{
-		(*container)[DATA][FILES][index][SOURCE] = json::value::string(source);
-		(*container)[DATA][FILES][index][TARGET] = 
-			json::value::string(converter::replace2(source, source_folder, target_folder));
-		index++;
-	}
-#else
-	(*container)[HEADER][TARGET_ID] = json::value::string("main_server");
-	(*container)[HEADER][TARGET_SUB_ID] = json::value::string("");
-	(*container)[HEADER][MESSAGE_TYPE] = json::value::string("download_files");
-
-	(*container)[DATA][INDICATION_ID] = json::value::string("download_test");
-
-	int index = 0;
-	(*container)[DATA][FILES] = json::value::array();
-	for (auto& source : sources)
-	{
-		(*container)[DATA][FILES][index][SOURCE] = json::value::string(converter::to_string(source));
-		(*container)[DATA][FILES][index][TARGET] =
-			json::value::string(converter::to_string(converter::replace2(source, source_folder, target_folder)));
-		index++;
-	}
-#endif
-#else
 	vector<shared_ptr<container::value>> files;
 
 	files.push_back(make_shared<container::string_value>(L"indication_id", L"download_test"));
@@ -188,7 +139,6 @@ int main(int argc, char* argv[])
 
 	shared_ptr<container::value_container> container =
 		make_shared<container::value_container>(L"main_server", L"", L"download_files", files);
-#endif
 
 	_future_status = _promise_status.get_future();
 
@@ -274,7 +224,9 @@ bool parse_arguments(argument_manager& arguments)
 	parse_ushort(L"--high_priority_count", arguments, high_priority_count);
 	parse_ushort(L"--normal_priority_count", arguments, normal_priority_count);
 	parse_ushort(L"--low_priority_count", arguments, low_priority_count);
-	parse_bool(L"--write_console_mode", arguments, write_console);
+	
+	parse_bool(L"--write_console", arguments, write_console);
+	parse_bool(L"--write_console_only", arguments, write_console_only);
 
 	target = arguments.get(L"--logging_level");
 	if (!target.empty())
@@ -292,26 +244,14 @@ void connection(const wstring& target_id, const wstring& target_sub_id, const bo
 			condition ? L"connected" : L"disconnected"));
 }
 
-#ifndef __USE_TYPE_CONTAINER__
-void received_message(shared_ptr<json::value> container)
-#else
 void received_message(shared_ptr<container::value_container> container)
-#endif
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	auto message_type = _registered_messages.find((*container)[HEADER][MESSAGE_TYPE].as_string());
-#else
-	auto message_type = _registered_messages.find(converter::to_wstring((*container)[HEADER][MESSAGE_TYPE].as_string()));
-#endif
-#else
 	auto message_type = _registered_messages.find(container->message_type());
-#endif
 	if (message_type != _registered_messages.end())
 	{
 		message_type->second(container);
@@ -319,136 +259,48 @@ void received_message(shared_ptr<container::value_container> container)
 		return;
 	}
 
-#ifdef __USE_TYPE_CONTAINER__
 	logger::handle().write(logging_level::sequence, fmt::format(L"unknown message: {}", container->serialize()));
-#else
-#ifdef _WIN32
-	logger::handle().write(logging_level::sequence, fmt::format(L"unknown message: {}", container->serialize()));
-#else
-	logger::handle().write(logging_level::sequence, converter::to_wstring(fmt::format("unknown message: {}", container->serialize())));
-#endif
-#endif
 }
 
-#ifndef __USE_TYPE_CONTAINER__
-void transfer_condition(shared_ptr<json::value> container)
-#else
 void transfer_condition(shared_ptr<container::value_container> container)
-#endif
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != TRANSFER_CONDITON)
-#else
-	if ((*container)[HEADER][MESSAGE_TYPE].as_string() != TRANSFER_CONDITON)
-#endif
-#else
 	if (container->message_type() != L"transfer_condition")
-#endif
 	{
 		return;
 	}
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	if ((*container)[DATA][L"percentage"].as_integer() == 0)
-#else
-	if ((*container)[DATA]["percentage"].as_integer() == 0)
-#endif
-#else
 	if (container->get_value(L"percentage")->to_ushort() == 0)
-#endif
 	{
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-		logger::handle().write(logging_level::information,
-			fmt::format(L"started download: [{}]", (*container)[DATA][INDICATION_ID].as_string()));
-#else
-		logger::handle().write(logging_level::information,
-			converter::to_wstring(fmt::format("started download: [{}]", (*container)[DATA][INDICATION_ID].as_string())));
-#endif
-#else
 		logger::handle().write(logging_level::information,
 			fmt::format(L"started download: [{}]", container->get_value(L"indication_id")->to_string()));
-#endif
 
 		return;
 	}
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	logger::handle().write(logging_level::information,
-		fmt::format(L"received percentage: [{}] {}%", (*container)[DATA][INDICATION_ID].as_string(),
-			(*container)[DATA][L"percentage"].as_integer()));
-#else
-	logger::handle().write(logging_level::information,
-		converter::to_wstring(fmt::format("received percentage: [{}] {}%", (*container)[DATA][INDICATION_ID].as_string(),
-			(*container)[DATA]["percentage"].as_integer())));
-#endif
-#else
 	logger::handle().write(logging_level::information,
 		fmt::format(L"received percentage: [{}] {}%", container->get_value(L"indication_id")->to_string(), 
 			container->get_value(L"percentage")->to_ushort()));
-#endif
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	if ((*container)[DATA][L"completed"].as_bool())
-#else
-	if ((*container)[DATA]["completed"].as_bool())
-#endif
-#else
 	if (container->get_value(L"completed")->to_boolean())
-#endif
 	{
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-		logger::handle().write(logging_level::information,
-			fmt::format(L"completed download: [{}]", (*container)[DATA][INDICATION_ID].as_string()));
-#else
-		logger::handle().write(logging_level::information,
-			converter::to_wstring(fmt::format("completed download: [{}]", (*container)[DATA][INDICATION_ID].as_string())));
-#endif
-#else
 		logger::handle().write(logging_level::information,
 			fmt::format(L"completed download: [{}]", container->get_value(L"indication_id")->to_string()));
-#endif
 
 		_promise_status.set_value(true);
 
 		return;
 	}
 
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-	if ((*container)[DATA][L"percentage"].as_integer() == 100)
-#else
-	if ((*container)[DATA]["percentage"].as_integer() == 100)
-#endif
-#else
 	if (container->get_value(L"percentage")->to_ushort() == 100)
-#endif
 	{
-#ifndef __USE_TYPE_CONTAINER__
-#ifdef _WIN32
-		logger::handle().write(logging_level::information,
-			fmt::format(L"completed download: [{}] success-{}, fail-{}", (*container)[DATA][INDICATION_ID].as_string(),
-				(*container)[DATA][L"completed_count"].as_integer(), (*container)[DATA][L"failed_count"].as_integer()));
-#else
-		logger::handle().write(logging_level::information,
-			converter::to_wstring(fmt::format("completed download: [{}] success-{}, fail-{}", (*container)[DATA][INDICATION_ID].as_string(),
-				(*container)[DATA]["completed_count"].as_integer(), (*container)[DATA]["failed_count"].as_integer())));
-#endif
-#else
 		logger::handle().write(logging_level::information,
 			fmt::format(L"completed download: [{}] success-{}, fail-{}", container->get_value(L"indication_id")->to_string(),
 				container->get_value(L"completed_count")->to_ushort(), container->get_value(L"failed_count")->to_ushort()));
-#endif
 
 		_promise_status.set_value(false);
 	}
