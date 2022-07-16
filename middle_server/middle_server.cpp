@@ -109,7 +109,6 @@ void parse_ulong(const wstring& key, argument_manager& arguments, unsigned long&
 #endif
 void parse_string(const wstring& key, argument_manager& arguments, wstring& value);
 bool parse_arguments(argument_manager& arguments);
-void display_help(void);
 
 void create_middle_server(void);
 void create_data_line(void);
@@ -236,14 +235,7 @@ void parse_string(const wstring& key, argument_manager& arguments, wstring& valu
 bool parse_arguments(argument_manager& arguments)
 {
 	wstring temp;
-
-	auto target = arguments.get(L"--help");
-	if (!target.empty())
-	{
-		display_help();
-
-		return false;
-	}
+	wstring target;
 
 	parse_bool(L"--encrypt_mode", arguments, encrypt_mode);
 	parse_bool(L"--compress_mode", arguments, compress_mode);
@@ -596,35 +588,4 @@ void uploaded_file(shared_ptr<container::value_container> container)
 			_middle_server->send(temp);
 		}
 	}
-}
-
-void display_help(void)
-{
-	wcout << L"main server options:" << endl << endl;
-	wcout << L"--encrypt_mode [value] " << endl;
-	wcout << L"\tThe encrypt_mode on/off. If you want to use encrypt mode must be appended '--encrypt_mode true'.\n\tInitialize value is --encrypt_mode off." << endl << endl;
-	wcout << L"--compress_mode [value]" << endl;
-	wcout << L"\tThe compress_mode on/off. If you want to use compress mode must be appended '--compress_mode true'.\n\tInitialize value is --compress_mode off." << endl << endl;
-	wcout << L"--compress_block_size [value]" << endl;
-	wcout << L"\tThe compress_mode on/off. If you want to change compress block size must be appended '--compress_block_size size'.\n\tInitialize value is --compress_mode 1024." << endl << endl;
-	wcout << L"--main_connection_key [value]" << endl;
-	wcout << L"\tIf you want to change a specific key string for the connection to the main server must be appended\n\t'--main_connection_key [specific key string]'." << endl << endl;
-	wcout << L"--middle_connection_key [value]" << endl;
-	wcout << L"\tIf you want to change a specific key string for the connection to the middle server must be appended\n\t'--middle_connection_key [specific key string]'." << endl << endl;
-	wcout << L"--main_server_port [value]" << endl;
-	wcout << L"\tIf you want to change a port number for the connection to the main server must be appended\n\t'--main_server_port [port number]'." << endl << endl;
-	wcout << L"--middle_server_port [value]" << endl;
-	wcout << L"\tIf you want to change a port number for the connection to the middle server must be appended\n\t'--middle_server_port [port number]'." << endl << endl;
-	wcout << L"--high_priority_count [value]" << endl;
-	wcout << L"\tIf you want to change high priority thread workers must be appended '--high_priority_count [count]'." << endl << endl;
-	wcout << L"--normal_priority_count [value]" << endl;
-	wcout << L"\tIf you want to change normal priority thread workers must be appended '--normal_priority_count [count]'." << endl << endl;
-	wcout << L"--low_priority_count [value]" << endl;
-	wcout << L"\tIf you want to change low priority thread workers must be appended '--low_priority_count [count]'." << endl << endl;
-	wcout << L"--session_limit_count [value]" << endl;
-	wcout << L"\tIf you want to change session limit count must be appended '--session_limit_count [count]'." << endl << endl;
-	wcout << L"--write_console_mode [value] " << endl;
-	wcout << L"\tThe write_console_mode on/off. If you want to display log on console must be appended '--write_console_mode true'.\n\tInitialize value is --write_console_mode off." << endl << endl;
-	wcout << L"--logging_level [value]" << endl;
-	wcout << L"\tIf you want to change log level must be appended '--logging_level [level]'." << endl;
 }

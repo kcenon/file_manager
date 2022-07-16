@@ -91,8 +91,6 @@ void parse_ushort(const wstring& key, argument_manager& arguments, unsigned shor
 void parse_string(const wstring& key, argument_manager& arguments, wstring& value);
 bool parse_arguments(argument_manager& arguments);
 
-void display_help(void);
-
 int main(int argc, char* argv[])
 {
 	argument_manager arguments(argc, argv);
@@ -109,8 +107,6 @@ int main(int argc, char* argv[])
 	if (sources.empty())
 	{
 		logger::handle().stop();
-
-		display_help();
 
 		return 0;
 	}
@@ -359,14 +355,7 @@ void parse_string(const wstring& key, argument_manager& arguments, wstring& valu
 bool parse_arguments(argument_manager& arguments)
 {
 	wstring temp;
-
-	auto target = arguments.get(L"--help");
-	if (!target.empty())
-	{
-		display_help();
-
-		return false;
-	}
+	wstring target;
 	
 	parse_ushort(L"--server_port", arguments, server_port);
 	parse_string(L"--source_folder", arguments, source_folder);
@@ -382,19 +371,4 @@ bool parse_arguments(argument_manager& arguments)
 	}
 
 	return true;
-}
-
-void display_help(void)
-{
-	wcout << L"restapi client sample options:" << endl << endl;
-	wcout << L"--server_port [value]" << endl;
-	wcout << L"\tIf you want to change a port number for the connection to the main server must be appended\n\t'--server_port [port number]'." << endl << endl;
-	wcout << L"--source_folder [path]" << endl;
-	wcout << L"\tIf you want to download folder on middle server on computer must be appended '--source_folder [path]'." << endl << endl;
-	wcout << L"--target_folder [path]" << endl;
-	wcout << L"\tIf you want to download on your computer must be appended '--target_folder [path]'." << endl << endl;
-	wcout << L"--write_console_mode [value] " << endl;
-	wcout << L"\tThe write_console_mode on/off. If you want to display log on console must be appended '--write_console_mode true'.\n\tInitialize value is --write_console_mode off." << endl << endl;
-	wcout << L"--logging_level [value]" << endl;
-	wcout << L"\tIf you want to change log level must be appended '--logging_level [level]'." << endl;
 }
