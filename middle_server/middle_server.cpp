@@ -92,7 +92,6 @@ size_t session_limit_count = 0;
 map<wstring, function<void(shared_ptr<container::value_container>)>> _file_commands;
 
 shared_ptr<file_manager> _file_manager = nullptr;
-shared_ptr<messaging_client> _data_line = nullptr;
 shared_ptr<messaging_client> _file_line = nullptr;
 shared_ptr<messaging_server> _middle_server = nullptr;
 
@@ -109,14 +108,11 @@ void parse_string(const wstring& key, argument_manager& arguments, wstring& valu
 bool parse_arguments(argument_manager& arguments);
 
 void create_middle_server(void);
-void create_data_line(void);
 void create_file_line(void);
 void connection_from_middle_server(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
-void connection_from_data_line(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
 void connection_from_file_line(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
 
 void received_message_from_middle_server(shared_ptr<container::value_container> container);
-void received_message_from_data_line(shared_ptr<container::value_container> container);
 void received_message_from_file_line(shared_ptr<container::value_container> container);
 
 void received_file_from_file_line(const wstring& source_id, const wstring& source_sub_id, const wstring& indication_id, const wstring& target_path);
@@ -150,10 +146,11 @@ int main(int argc, char* argv[])
 	_file_manager = make_shared<file_manager>();
 
 	create_middle_server();
-	create_data_line();
 	create_file_line();
 
 	_middle_server->wait_stop();
+
+	_file_line->stop();
 
 	logger::handle().stop();
 
@@ -163,10 +160,6 @@ int main(int argc, char* argv[])
 void signal_callback(int signum) 
 {	
 	_middle_server.reset();
-	_data_line.reset();
-	_file_line.reset();
-
-	logger::handle().stop();
 }
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
@@ -289,23 +282,6 @@ void create_middle_server(void)
 	_middle_server->start(middle_server_port, high_priority_count, normal_priority_count, low_priority_count);
 }
 
-void create_data_line(void)
-{
-	if (_data_line != nullptr)
-	{
-		_data_line.reset();
-	}
-
-	_data_line = make_shared<messaging_client>(L"data_line");
-	_data_line->set_bridge_line(true);
-	_data_line->set_compress_mode(compress_mode);
-	_data_line->set_connection_key(main_connection_key);
-	_data_line->set_session_types(session_types::message_line);
-	_data_line->set_connection_notification(&connection_from_data_line);
-	_data_line->set_message_notification(&received_message_from_data_line);
-	_data_line->start(main_server_ip, main_server_port, high_priority_count, normal_priority_count, low_priority_count);
-}
-
 void create_file_line(void)
 {
 	if (_file_line != nullptr)
@@ -337,15 +313,7 @@ void received_message_from_middle_server(shared_ptr<container::value_container> 
 		return;
 	}
 
-	auto target = _file_commands.find(container->message_type());
-	if (target != _file_commands.end())
-	{
-		target->second(container);
-
-		return;
-	}
-
-	if (_data_line == nullptr || _data_line->get_confirm_status() == connection_conditions::confirmed)
+	if (_file_line == nullptr || _file_line->get_confirm_status() != connection_conditions::confirmed)
 	{
 		if (_middle_server == nullptr)
 		{
@@ -363,35 +331,21 @@ void received_message_from_middle_server(shared_ptr<container::value_container> 
 		return;
 	}
 
-	if (_data_line)
+	auto target = _file_commands.find(container->message_type());
+	if (target == _file_commands.end())
 	{
-		_data_line->send(container);
-	}
-}
+		shared_ptr<container::value_container> response = container->copy(false);
+		response->swap_header();
 
-void connection_from_data_line(const wstring& target_id, const wstring& target_sub_id, const bool& condition)
-{
-	if (_data_line == nullptr)
-	{
+		response << make_shared<container::bool_value>(L"error", true);
+		response << make_shared<container::string_value>(L"reason", L"cannot parse unknown message");
+
+		_middle_server->send(response);
+
 		return;
 	}
 
-	logger::handle().write(logging_level::sequence,
-		fmt::format(L"{} on middle server is {} from target: {}[{}]", _data_line->source_id(), condition ? L"connected" : L"disconnected", target_id, target_sub_id));
-
-	if (condition)
-	{
-		return;
-	}
-
-	if (_middle_server == nullptr)
-	{
-		return;
-	}
-
-	this_thread::sleep_for(chrono::seconds(1));
-
-	_data_line->start(main_server_ip, main_server_port, high_priority_count, normal_priority_count, low_priority_count);
+	target->second(container);
 }
 
 void connection_from_file_line(const wstring& target_id, const wstring& target_sub_id, const bool& condition)
@@ -417,19 +371,6 @@ void connection_from_file_line(const wstring& target_id, const wstring& target_s
 	this_thread::sleep_for(chrono::seconds(1));
 
 	_file_line->start(main_server_ip, main_server_port, high_priority_count, normal_priority_count, low_priority_count);
-}
-
-void received_message_from_data_line(shared_ptr<container::value_container> container)
-{
-	if (container == nullptr)
-	{
-		return;
-	}
-
-	if (_middle_server)
-	{
-		_middle_server->send(container);
-	}
 }
 
 void received_message_from_file_line(shared_ptr<container::value_container> container)
@@ -475,9 +416,9 @@ void download_files(shared_ptr<container::value_container> container)
 		return;
 	}
 
-	if (_file_line == nullptr || _file_line->get_confirm_status() == connection_conditions::confirmed)
+	if (_file_line == nullptr || _file_line->get_confirm_status() != connection_conditions::confirmed)
 	{
-		if (_middle_server)
+		if (_middle_server == nullptr)
 		{
 			return;
 		}
@@ -491,10 +432,11 @@ void download_files(shared_ptr<container::value_container> container)
 		_middle_server->send(response);
 
 		return;
-	}
+	} 
+
+	logger::handle().write(logging_level::information, L"attempt to prepare downloading files from main_server");
 
 	vector<wstring> target_paths;
-
 	vector<shared_ptr<container::value>> files = container->value_array(L"file");
 	for (auto& file : files)
 	{
@@ -503,7 +445,7 @@ void download_files(shared_ptr<container::value_container> container)
 
 	_file_manager->set(container->get_value(L"indication_id")->to_string(),
 		container->source_id(), container->source_sub_id(), target_paths);
-
+	
 	if (_middle_server)
 	{
 		_middle_server->send(make_shared<container::value_container>(container->source_id(), container->source_sub_id(), L"transfer_condition",
@@ -529,9 +471,9 @@ void upload_files(shared_ptr<container::value_container> container)
 		return;
 	}
 
-	if (_file_line == nullptr || _file_line->get_confirm_status() == connection_conditions::confirmed)
+	if (_file_line == nullptr || _file_line->get_confirm_status() != connection_conditions::confirmed)
 	{
-		if (_middle_server)
+		if (_middle_server == nullptr)
 		{
 			return;
 		}
@@ -546,6 +488,8 @@ void upload_files(shared_ptr<container::value_container> container)
 
 		return;
 	}
+
+	logger::handle().write(logging_level::information, L"attempt to prepare uploading files to main_server");
 	
 	if (_file_line)
 	{

@@ -81,7 +81,7 @@ unsigned short low_priority_count = 3;
 
 promise<bool> _promise_status;
 future<bool> _future_status;
-
+shared_ptr<messaging_client> client = nullptr;
 map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
@@ -91,6 +91,7 @@ void connection(const wstring& target_id, const wstring& target_sub_id, const bo
 
 void received_message(shared_ptr<container::value_container> container);
 void transfer_condition(shared_ptr<container::value_container> container);
+void request_download_files(void);
 
 int main(int argc, char* argv[])
 {
@@ -104,17 +105,9 @@ int main(int argc, char* argv[])
 	logger::handle().set_target_level(log_level);
 	logger::handle().start(PROGRAM_NAME);
 
-	vector<wstring> sources = folder::get_files(source_folder);
-	if (sources.empty())
-	{
-		logger::handle().stop();
-
-		return 0;
-	}
-
 	_registered_messages.insert({ L"transfer_condition", transfer_condition });
 
-	shared_ptr<messaging_client> client = make_shared<messaging_client>(PROGRAM_NAME);
+	client = make_shared<messaging_client>(PROGRAM_NAME);
 	client->set_compress_mode(compress_mode);
 	client->set_connection_key(connection_key);
 	client->set_session_types(session_types::message_line);
@@ -122,24 +115,7 @@ int main(int argc, char* argv[])
 	client->set_message_notification(&received_message);
 	client->start(server_ip, server_port, high_priority_count, normal_priority_count, low_priority_count);
 
-	vector<shared_ptr<container::value>> files;
-
-	files.push_back(make_shared<container::string_value>(L"indication_id", L"download_test"));
-	for (auto& source : sources)
-	{
-		files.push_back(make_shared<container::container_value>(L"file", vector<shared_ptr<container::value>> {
-			make_shared<container::string_value>(L"source", source),
-			make_shared<container::string_value>(L"target", converter::replace2(source, source_folder, target_folder))
-		}));
-	}
-
-	shared_ptr<container::value_container> container =
-		make_shared<container::value_container>(L"main_server", L"", L"download_files", files);
-
 	_future_status = _promise_status.get_future();
-
-	client->send(container);
-
 	_future_status.wait();
 
 	client->stop();
@@ -231,6 +207,11 @@ void connection(const wstring& target_id, const wstring& target_sub_id, const bo
 	logger::handle().write(logging_level::information,
 		fmt::format(L"a client on main server: {}[{}] is {}", target_id, target_sub_id, 
 			condition ? L"connected" : L"disconnected"));
+
+	if (condition)
+	{
+		request_download_files();
+	}
 }
 
 void received_message(shared_ptr<container::value_container> container)
@@ -293,4 +274,32 @@ void transfer_condition(shared_ptr<container::value_container> container)
 
 		_promise_status.set_value(false);
 	}
+}
+
+void request_download_files(void)
+{
+	vector<wstring> sources = folder::get_files(source_folder);
+	if (sources.empty())
+	{
+		logger::handle().write(logging_level::error,
+			fmt::format(L"there is no file: {}", source_folder));
+
+		return;
+	}
+
+	vector<shared_ptr<container::value>> files;
+
+	files.push_back(make_shared<container::string_value>(L"indication_id", L"download_test"));
+	for (auto& source : sources)
+	{
+		files.push_back(make_shared<container::container_value>(L"file", vector<shared_ptr<container::value>> {
+			make_shared<container::string_value>(L"source", source),
+			make_shared<container::string_value>(L"target", converter::replace2(source, source_folder, target_folder))
+		}));
+	}
+
+	shared_ptr<container::value_container> container =
+		make_shared<container::value_container>(L"main_server", L"", L"download_files", files);
+
+	client->send(container);
 }

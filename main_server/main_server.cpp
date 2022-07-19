@@ -146,8 +146,6 @@ int main(int argc, char* argv[])
 void signal_callback(int signum) 
 {	
 	_main_server.reset();
-
-	logger::handle().stop();
 }
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value)

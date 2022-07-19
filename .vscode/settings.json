@@ -12,6 +12,7 @@
         "unordered_map": "cpp",
         "algorithm": "cpp",
         "iosfwd": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "functional": "cpp"
     }
 }
