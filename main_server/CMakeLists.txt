@@ -4,6 +4,9 @@ SET(PROGRAM_NAME main_server)
 SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED True)
 
+SET(HEADERS file_manager.h)
+SET(SOURCES file_manager.cpp main_server.cpp)
+
 IF(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG /MDd")
 ELSE()
@@ -12,8 +15,7 @@ ENDIF()
 
 PROJECT(${PROGRAM_NAME})
 
-ADD_EXECUTABLE(${PROGRAM_NAME} 
-    file_manager.h file_manager.cpp main_server.cpp)
+ADD_EXECUTABLE(${PROGRAM_NAME} ${HEADERS} ${SOURCES})
 
 INCLUDE_DIRECTORIES(../messaging_system/utilities)
 INCLUDE_DIRECTORIES(../messaging_system/container)
