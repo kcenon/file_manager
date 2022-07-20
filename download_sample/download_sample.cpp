@@ -82,6 +82,7 @@ unsigned short low_priority_count = 3;
 promise<bool> _promise_status;
 future<bool> _future_status;
 shared_ptr<messaging_client> client = nullptr;
+
 map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
 
 void parse_bool(const wstring& key, argument_manager& arguments, bool& value);

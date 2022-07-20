@@ -438,13 +438,51 @@ void download_files(shared_ptr<container::value_container> container)
 
 	vector<wstring> target_paths;
 	vector<shared_ptr<container::value>> files = container->value_array(L"file");
+	if(files.empty())
+	{
+		shared_ptr<container::value_container> response = container->copy(false);
+		response->swap_header();
+
+		response << make_shared<container::bool_value>(L"error", true);
+		response << make_shared<container::string_value>(L"reason", L"cannot download with empty file information (source or target) from main_server.");
+
+		_middle_server->send(response);
+
+		return;
+	}
+
+	logger::handle().write(logging_level::information, container->serialize());
+
 	for (auto& file : files)
 	{
-		target_paths.push_back((*file)[L"target"]->to_string());
+		logger::handle().write(logging_level::information, file->serialize());
+
+		auto data_array = file->value_array(L"target");
+		if (data_array.empty())
+		{
+			continue;
+		}
+
+		target_paths.push_back(data_array[0]->to_string());
+	}
+
+	if(target_paths.empty())
+	{
+		shared_ptr<container::value_container> response = container->copy(false);
+		response->swap_header();
+
+		response << make_shared<container::bool_value>(L"error", true);
+		response << make_shared<container::string_value>(L"reason", L"cannot download with empty target file information from main_server.");
+
+		_middle_server->send(response);
+
+		return;
 	}
 
 	_file_manager->set(container->get_value(L"indication_id")->to_string(),
 		container->source_id(), container->source_sub_id(), target_paths);
+
+	logger::handle().write(logging_level::information, L"prepared parsing of downloading files from main_server");
 	
 	if (_middle_server)
 	{
