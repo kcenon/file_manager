@@ -77,19 +77,18 @@ using namespace web::http;
 using namespace web::http::experimental::listener;
 
 #ifdef _DEBUG
-bool write_console = true;
-#else
-bool write_console = false;
-#endif
-bool write_console_only = false;
 bool encrypt_mode = false;
-bool compress_mode = true;
-unsigned short compress_block_size = 1024;
-#ifdef _DEBUG
+bool compress_mode = false;
 logging_level log_level = logging_level::parameter;
+logging_styles logging_style = logging_styles::console_only;
 #else
+bool encrypt_mode = true;
+bool compress_mode = true;
 logging_level log_level = logging_level::information;
+logging_styles logging_style = logging_styles::file_only;
 #endif
+unsigned short compress_block_size = 1024;
+
 wstring connection_key = L"middle_connection_key";
 wstring server_ip = L"127.0.0.1";
 unsigned short server_port = 8642;
@@ -142,7 +141,7 @@ int main(int argc, char* argv[])
 	signal(SIGSEGV, signal_callback);
 	signal(SIGTERM, signal_callback);
 
-	logger::handle().set_write_console(write_console);
+	logger::handle().set_write_console(logging_style);
 	logger::handle().set_target_level(log_level);
 	logger::handle().start(PROGRAM_NAME);
 
@@ -232,8 +231,25 @@ bool parse_arguments(argument_manager& arguments)
 	parse_ushort(L"--normal_priority_count", arguments, normal_priority_count);
 	parse_ushort(L"--low_priority_count", arguments, low_priority_count);
 	
-	parse_bool(L"--write_console", arguments, write_console);
-	parse_bool(L"--write_console_only", arguments, write_console_only);
+	bool temp_condition = false;
+	parse_bool(L"--write_console_only", arguments, temp_condition);
+	if (temp_condition)
+	{
+		logging_style = logging_styles::console_only;
+	}
+	else
+	{
+		temp_condition = true;
+		parse_bool(L"--write_console", arguments, temp_condition);
+		if (temp_condition)
+		{
+			logging_style = logging_styles::file_and_console;
+		}
+		else
+		{
+			logging_style = logging_styles::file_only;
+		}
+	}
 
 	target = arguments.get(L"--logging_level");
 	if (!target.empty())

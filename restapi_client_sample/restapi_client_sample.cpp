@@ -65,14 +65,18 @@ using namespace web;
 using namespace web::http;
 using namespace web::http::client;
 
-bool write_console = false;
-bool write_console_only = false;
-
 #ifdef _DEBUG
+bool encrypt_mode = false;
+bool compress_mode = false;
 logging_level log_level = logging_level::parameter;
+logging_styles logging_style = logging_styles::console_only;
 #else
+bool encrypt_mode = true;
+bool compress_mode = true;
 logging_level log_level = logging_level::information;
+logging_styles logging_style = logging_styles::file_only;
 #endif
+
 wstring source_folder = L"";
 wstring target_folder = L"";
 unsigned short server_port = 7654;
@@ -99,7 +103,7 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	logger::handle().set_write_console(write_console);
+	logger::handle().set_write_console(logging_style);
 	logger::handle().set_target_level(log_level);
 	logger::handle().start(PROGRAM_NAME);
 
@@ -361,8 +365,25 @@ bool parse_arguments(argument_manager& arguments)
 	parse_string(L"--source_folder", arguments, source_folder);
 	parse_string(L"--target_folder", arguments, target_folder);
 	
-	parse_bool(L"--write_console", arguments, write_console);
-	parse_bool(L"--write_console_only", arguments, write_console_only);
+	bool temp_condition = false;
+	parse_bool(L"--write_console_only", arguments, temp_condition);
+	if (temp_condition)
+	{
+		logging_style = logging_styles::console_only;
+	}
+	else
+	{
+		temp_condition = true;
+		parse_bool(L"--write_console", arguments, temp_condition);
+		if (temp_condition)
+		{
+			logging_style = logging_styles::file_and_console;
+		}
+		else
+		{
+			logging_style = logging_styles::file_only;
+		}
+	}
 
 	target = arguments.get(L"--logging_level");
 	if (!target.empty())
