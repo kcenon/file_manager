@@ -43,11 +43,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "folder_handler.h"
 #include "argument_parser.h"
 #include "constexpr_string.h"
-#include "cpprest/json.h"
-#include "cpprest/http_client.h"
 
 #include "fmt/xchar.h"
 #include "fmt/format.h"
+
+#include "cpprest/json.h"
+#include "cpprest/http_client.h"
 
 #include <future>
 #include <vector>
