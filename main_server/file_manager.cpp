@@ -131,6 +131,12 @@ shared_ptr<container::value_container> file_manager::received(const wstring& ind
 		size_t completed = target->second.size();
 		size_t failed = fail->second.size();
 
+		_transferring_list.erase(source);
+		_transferring_ids.erase(ids);
+		_transferred_list.erase(target);
+		_failed_list.erase(fail);
+		_transferred_percentage.erase(percentage);
+
 		return make_shared<container::value_container>(ids->second.first, ids->second.second, L"transfer_condition",
 			vector<shared_ptr<container::value>> {
 				make_shared<container::string_value>(L"indication_id", indication_id),
