@@ -131,11 +131,7 @@ shared_ptr<container::value_container> file_manager::received(const wstring& ind
 		size_t completed = target->second.size();
 		size_t failed = fail->second.size();
 
-		_transferring_list.erase(source);
-		_transferring_ids.erase(ids);
-		_transferred_list.erase(target);
-		_failed_list.erase(fail);
-		_transferred_percentage.erase(percentage);
+		clear(percentage, ids, source, target, fail);
 
 		return make_shared<container::value_container>(ids->second.first, ids->second.second, L"transfer_condition",
 			vector<shared_ptr<container::value>> {
@@ -159,11 +155,7 @@ shared_ptr<container::value_container> file_manager::received(const wstring& ind
 		wstring source_id = ids->second.first;
 		wstring source_sub_id = ids->second.second;
 
-		_transferring_list.erase(source);
-		_transferring_ids.erase(ids);
-		_transferred_list.erase(target);
-		_failed_list.erase(fail);
-		_transferred_percentage.erase(percentage);
+		clear(percentage, ids, source, target, fail);
 
 		return make_shared<container::value_container>(source_id, source_sub_id, L"transfer_condition",
 			vector<shared_ptr<container::value>> {
@@ -176,4 +168,17 @@ shared_ptr<container::value_container> file_manager::received(const wstring& ind
 	}
 
 	return nullptr;
+}
+
+void file_manager::clear(const map<wstring, unsigned short>::iterator& percentage_iter,
+		const map<wstring, pair<wstring, wstring>>::iterator& ids_iter,
+		const map<wstring, vector<wstring>>::iterator& transferring_iter,
+		const map<wstring, vector<wstring>>::iterator& transferred_iter,
+		const map<wstring, vector<wstring>>::iterator& failed_iter)
+{
+	_transferring_list.erase(transferring_iter);
+	_transferring_ids.erase(ids_iter);
+	_transferred_list.erase(transferred_iter);
+	_failed_list.erase(failed_iter);
+	_transferred_percentage.erase(percentage_iter);
 }

@@ -55,6 +55,13 @@ public:
 	shared_ptr<container::value_container> received(const wstring& indication_id, const wstring& file_path);
 
 private:
+	void clear(const map<wstring, unsigned short>::iterator& percentage_iter,
+		const map<wstring, pair<wstring, wstring>>::iterator& ids_iter,
+		const map<wstring, vector<wstring>>::iterator& transferring_iter,
+		const map<wstring, vector<wstring>>::iterator& transferred_iter,
+		const map<wstring, vector<wstring>>::iterator& failed_iter);
+
+private:
 	mutex _mutex;
 	map<wstring, unsigned short> _transferred_percentage;
 	map<wstring, pair<wstring, wstring>> _transferring_ids;
