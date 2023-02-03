@@ -91,9 +91,6 @@ future<bool> _future_status;
 void get_request(void);
 void post_request(const vector<unsigned char>& data);
 
-void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
-void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
-void parse_string(const wstring& key, argument_manager& arguments, wstring& value);
 bool parse_arguments(argument_manager& arguments);
 
 int main(int argc, char* argv[])
@@ -325,72 +322,49 @@ void post_request(const vector<unsigned char>& data)
 	_thread_pool->push(make_shared<job>(priorities::low, &get_request));
 }
 
-void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
-{
-	auto target = arguments.get(key);
-	if (target.empty())
-	{
-		return;
-	}
-
-	auto temp = target;
-	transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-	value = temp.compare(L"true") == 0;
-}
-
-void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value)
-{
-	auto target = arguments.get(key);
-	if (!target.empty())
-	{
-		value = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-}
-
-void parse_string(const wstring& key, argument_manager& arguments, wstring& value)
-{
-	auto target = arguments.get(key);
-	if(!target.empty())
-	{
-		value = target;
-	}
-}
-
 bool parse_arguments(argument_manager& arguments)
 {
-	wstring temp;
-	wstring target;
-	
-	parse_ushort(L"--server_port", arguments, server_port);
-	parse_string(L"--source_folder", arguments, source_folder);
-	parse_string(L"--target_folder", arguments, target_folder);
-	
-	bool temp_condition = false;
-	parse_bool(L"--write_console_only", arguments, temp_condition);
-	if (temp_condition)
+	auto ushort_target = arguments.to_ushort(L"--server_port");
+	if (ushort_target != nullopt)
 	{
-		logging_style = logging_styles::console_only;
-	}
-	else
-	{
-		temp_condition = true;
-		parse_bool(L"--write_console", arguments, temp_condition);
-		if (temp_condition)
-		{
-			logging_style = logging_styles::file_and_console;
-		}
-		else
-		{
-			logging_style = logging_styles::file_only;
-		}
+		server_port = *ushort_target;
 	}
 
-	target = arguments.get(L"--logging_level");
-	if (!target.empty())
+	auto string_target = arguments.to_string(L"--source_folder");
+	if (string_target != nullopt)
 	{
-		log_level = (logging_level)atoi(converter::to_string(target).c_str());
+		source_folder = *string_target;
 	}
+	
+	string_target = arguments.to_string(L"--target_folder");
+	if (string_target != nullopt)
+	{
+		target_folder = *string_target;
+	}
+	
+	auto int_target = arguments.to_int(L"--logging_level");
+	if (int_target != nullopt)
+	{
+		log_level = (logging_level)*int_target;
+	}
+	
+	auto bool_target = arguments.to_bool(L"--write_console_only");
+	if (bool_target != nullopt && *bool_target)
+	{
+		logging_style = logging_styles::console_only;
+
+		return true;
+	}
+
+	bool_target = arguments.to_bool(L"--write_console");
+	if (bool_target != nullopt && *bool_target)
+	{
+		logging_style = logging_styles::file_and_console;
+	
+		return true;
+	}
+
+	logging_style = logging_styles::file_only;
 
 	return true;
 }

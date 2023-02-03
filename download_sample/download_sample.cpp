@@ -84,8 +84,6 @@ shared_ptr<messaging_client> client = nullptr;
 
 map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
 
-void parse_bool(const wstring& key, argument_manager& arguments, bool& value);
-void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value);
 bool parse_arguments(argument_manager& arguments);
 void connection(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
 
@@ -125,96 +123,67 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-void parse_bool(const wstring& key, argument_manager& arguments, bool& value)
-{
-	auto target = arguments.get(key);
-	if (target.empty())
-	{
-		return;
-	}
-
-	auto temp = target;
-	transform(temp.begin(), temp.end(), temp.begin(), ::tolower);
-
-	value = temp.compare(L"true") == 0;
-}
-
-void parse_ushort(const wstring& key, argument_manager& arguments, unsigned short& value)
-{
-	auto target = arguments.get(key);
-	if (!target.empty())
-	{
-		value = (unsigned short)atoi(converter::to_string(target).c_str());
-	}
-}
-
 bool parse_arguments(argument_manager& arguments)
 {
-	wstring temp;
-	wstring target;
-
-	parse_bool(L"--encrypt_mode", arguments, encrypt_mode);
-	parse_bool(L"--compress_mode", arguments, compress_mode);
-
-	target = arguments.get(L"--connection_key");
-	if (!target.empty())
+	auto bool_target = arguments.to_bool(L"--encrypt_mode");
+	if (bool_target != nullopt)
 	{
-		temp = converter::to_wstring(file::load(target));
-		if (!temp.empty())
-		{
-			connection_key = temp;
-		}
+		encrypt_mode = *bool_target;
 	}
 
-	target = arguments.get(L"--server_ip");
-	if (!target.empty())
+	bool_target = arguments.to_bool(L"--compress_mode");
+	if (bool_target != nullopt)
 	{
-		server_ip = target;
+		compress_mode = *bool_target;
 	}
 
-	parse_ushort(L"--server_port", arguments, server_port);
-
-	target = arguments.get(L"--source_folder");
-	if (!target.empty())
+	auto ushort_target = arguments.to_ushort(L"--server_port");
+	if (ushort_target != nullopt)
 	{
-		source_folder = target;
+		server_port = *ushort_target;
 	}
 
-	target = arguments.get(L"--target_folder");
-	if (!target.empty())
+	ushort_target = arguments.to_ushort(L"--high_priority_count");
+	if (ushort_target != nullopt)
 	{
-		target_folder = target;
+		high_priority_count = *ushort_target;
 	}
 
-	parse_ushort(L"--high_priority_count", arguments, high_priority_count);
-	parse_ushort(L"--normal_priority_count", arguments, normal_priority_count);
-	parse_ushort(L"--low_priority_count", arguments, low_priority_count);
+	ushort_target = arguments.to_ushort(L"--normal_priority_count");
+	if (ushort_target != nullopt)
+	{
+		normal_priority_count = *ushort_target;
+	}
+
+	ushort_target = arguments.to_ushort(L"--low_priority_count");
+	if (ushort_target != nullopt)
+	{
+		low_priority_count = *ushort_target;
+	}
 	
-	bool temp_condition = false;
-	parse_bool(L"--write_console_only", arguments, temp_condition);
-	if (temp_condition)
+	auto int_target = arguments.to_int(L"--logging_level");
+	if (int_target != nullopt)
+	{
+		log_level = (logging_level)*int_target;
+	}
+	
+	bool_target = arguments.to_bool(L"--write_console_only");
+	if (bool_target != nullopt && *bool_target)
 	{
 		logging_style = logging_styles::console_only;
-	}
-	else
-	{
-		temp_condition = true;
-		parse_bool(L"--write_console", arguments, temp_condition);
-		if (temp_condition)
-		{
-			logging_style = logging_styles::file_and_console;
-		}
-		else
-		{
-			logging_style = logging_styles::file_only;
-		}
+
+		return true;
 	}
 
-	target = arguments.get(L"--logging_level");
-	if (!target.empty())
+	bool_target = arguments.to_bool(L"--write_console");
+	if (bool_target != nullopt && *bool_target)
 	{
-		log_level = (logging_level)atoi(converter::to_string(target).c_str());
+		logging_style = logging_styles::file_and_console;
+	
+		return true;
 	}
+
+	logging_style = logging_styles::file_only;
 
 	return true;
 }
