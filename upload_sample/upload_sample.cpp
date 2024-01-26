@@ -32,19 +32,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <iostream>
 
-#include "logging.h"
+#include "argument_parser.h"
 #include "converting.h"
 #include "file_handler.h"
-#include "messaging_client.h"
 #include "folder_handler.h"
-#include "argument_parser.h"
+#include "logging.h"
+#include "messaging_client.h"
 
 #include "container.h"
-#include "values/string_value.h"
 #include "values/container_value.h"
+#include "values/string_value.h"
 
-#include "fmt/xchar.h"
 #include "fmt/format.h"
+#include "fmt/xchar.h"
 
 #include <future>
 
@@ -83,218 +83,211 @@ promise<bool> _promise_status;
 future<bool> _future_status;
 shared_ptr<messaging_client> client = nullptr;
 
-map<wstring, function<void(shared_ptr<container::value_container>)>> _registered_messages;
+map<wstring, function<void(shared_ptr<container::value_container>)>>
+    _registered_messages;
 
-bool parse_arguments(argument_manager& arguments);
-void connection(const wstring& target_id, const wstring& target_sub_id, const bool& condition);
+bool parse_arguments(argument_manager &arguments);
+void connection(const wstring &target_id, const wstring &target_sub_id,
+                const bool &condition);
 
 void received_message(shared_ptr<container::value_container> container);
 void transfer_condition(shared_ptr<container::value_container> container);
 void request_upload_files(void);
 
-int main(int argc, char* argv[])
-{
-	argument_manager arguments(argc, argv);
-	if (!parse_arguments(arguments))
-	{
-		return 0;
-	}
+int main(int argc, char *argv[]) {
+  argument_manager arguments(argc, argv);
+  if (!parse_arguments(arguments)) {
+    return 0;
+  }
 
-	logger::handle().set_write_console(logging_style);
-	logger::handle().set_target_level(log_level);
-	logger::handle().start(PROGRAM_NAME);
+  logger::handle().set_write_console(logging_style);
+  logger::handle().set_target_level(log_level);
+  logger::handle().start(PROGRAM_NAME);
 
-	vector<wstring> sources = folder::get_files(source_folder);
-	if (sources.empty())
-	{
-		logger::handle().stop();
+  vector<wstring> sources = folder::get_files(source_folder);
+  if (sources.empty()) {
+    logger::handle().stop();
 
-		return 0;
-	}
+    return 0;
+  }
 
-	_registered_messages.insert({ L"transfer_condition", transfer_condition });
+  _registered_messages.insert({L"transfer_condition", transfer_condition});
 
-	client = make_shared<messaging_client>(PROGRAM_NAME);
-	client->set_compress_mode(compress_mode);
-	client->set_connection_key(connection_key);
-	client->set_session_types(session_types::message_line);
-	client->set_connection_notification(&connection);
-	client->set_message_notification(&received_message);
-	client->start(server_ip, server_port, high_priority_count, normal_priority_count, low_priority_count);
+  client = make_shared<messaging_client>(PROGRAM_NAME);
+  client->set_compress_mode(compress_mode);
+  client->set_connection_key(connection_key);
+  client->set_session_types(session_types::message_line);
+  client->set_connection_notification(&connection);
+  client->set_message_notification(&received_message);
+  client->start(server_ip, server_port, high_priority_count,
+                normal_priority_count, low_priority_count);
 
-	_future_status = _promise_status.get_future();
-	_future_status.wait();
+  _future_status = _promise_status.get_future();
+  _future_status.wait();
 
-	client->stop();
+  client->stop();
 
-	logger::handle().stop();
+  logger::handle().stop();
 
-	return 0;
+  return 0;
 }
 
-bool parse_arguments(argument_manager& arguments)
-{
-	auto bool_target = arguments.to_bool(L"--encrypt_mode");
-	if (bool_target != nullopt)
-	{
-		encrypt_mode = *bool_target;
-	}
+bool parse_arguments(argument_manager &arguments) {
+  auto bool_target = arguments.to_bool(L"--encrypt_mode");
+  if (bool_target != nullopt) {
+    encrypt_mode = *bool_target;
+  }
 
-	bool_target = arguments.to_bool(L"--compress_mode");
-	if (bool_target != nullopt)
-	{
-		compress_mode = *bool_target;
-	}
+  bool_target = arguments.to_bool(L"--compress_mode");
+  if (bool_target != nullopt) {
+    compress_mode = *bool_target;
+  }
 
-	auto ushort_target = arguments.to_ushort(L"--server_port");
-	if (ushort_target != nullopt)
-	{
-		server_port = *ushort_target;
-	}
+  auto ushort_target = arguments.to_ushort(L"--server_port");
+  if (ushort_target != nullopt) {
+    server_port = *ushort_target;
+  }
 
-	ushort_target = arguments.to_ushort(L"--high_priority_count");
-	if (ushort_target != nullopt)
-	{
-		high_priority_count = *ushort_target;
-	}
+  ushort_target = arguments.to_ushort(L"--high_priority_count");
+  if (ushort_target != nullopt) {
+    high_priority_count = *ushort_target;
+  }
 
-	ushort_target = arguments.to_ushort(L"--normal_priority_count");
-	if (ushort_target != nullopt)
-	{
-		normal_priority_count = *ushort_target;
-	}
+  ushort_target = arguments.to_ushort(L"--normal_priority_count");
+  if (ushort_target != nullopt) {
+    normal_priority_count = *ushort_target;
+  }
 
-	ushort_target = arguments.to_ushort(L"--low_priority_count");
-	if (ushort_target != nullopt)
-	{
-		low_priority_count = *ushort_target;
-	}
-	
-	auto int_target = arguments.to_int(L"--logging_level");
-	if (int_target != nullopt)
-	{
-		log_level = (logging_level)*int_target;
-	}
-	
-	bool_target = arguments.to_bool(L"--write_console_only");
-	if (bool_target != nullopt && *bool_target)
-	{
-		logging_style = logging_styles::console_only;
+  ushort_target = arguments.to_ushort(L"--low_priority_count");
+  if (ushort_target != nullopt) {
+    low_priority_count = *ushort_target;
+  }
 
-		return true;
-	}
+  auto int_target = arguments.to_int(L"--logging_level");
+  if (int_target != nullopt) {
+    log_level = (logging_level)*int_target;
+  }
 
-	bool_target = arguments.to_bool(L"--write_console");
-	if (bool_target != nullopt && *bool_target)
-	{
-		logging_style = logging_styles::file_and_console;
-	
-		return true;
-	}
+  bool_target = arguments.to_bool(L"--write_console_only");
+  if (bool_target != nullopt && *bool_target) {
+    logging_style = logging_styles::console_only;
 
-	logging_style = logging_styles::file_only;
+    return true;
+  }
 
-	return true;
+  bool_target = arguments.to_bool(L"--write_console");
+  if (bool_target != nullopt && *bool_target) {
+    logging_style = logging_styles::file_and_console;
+
+    return true;
+  }
+
+  logging_style = logging_styles::file_only;
+
+  return true;
 }
 
-void connection(const wstring& target_id, const wstring& target_sub_id, const bool& condition)
-{
-	logger::handle().write(logging_level::information,
-		fmt::format(L"a client on main server: {}[{}] is {}", target_id, target_sub_id, 
-			condition ? L"connected" : L"disconnected"));
+void connection(const wstring &target_id, const wstring &target_sub_id,
+                const bool &condition) {
+  logger::handle().write(
+      logging_level::information,
+      fmt::format(L"a client on main server: {}[{}] is {}", target_id,
+                  target_sub_id, condition ? L"connected" : L"disconnected"));
 
-	if (condition)
-	{
-		request_upload_files();
-	}
+  if (condition) {
+    request_upload_files();
+  }
 }
 
-void received_message(shared_ptr<container::value_container> container)
-{
-	if (container == nullptr)
-	{
-		return;
-	}
+void received_message(shared_ptr<container::value_container> container) {
+  if (container == nullptr) {
+    return;
+  }
 
-	auto message_type = _registered_messages.find(container->message_type());
-	if (message_type != _registered_messages.end())
-	{
-		message_type->second(container);
+  auto message_type = _registered_messages.find(container->message_type());
+  if (message_type != _registered_messages.end()) {
+    message_type->second(container);
 
-		return;
-	}
+    return;
+  }
 
-	logger::handle().write(logging_level::sequence, fmt::format(L"unknown message: {}", container->serialize()));
+  logger::handle().write(
+      logging_level::sequence,
+      fmt::format(L"unknown message: {}", container->serialize()));
 }
 
-void transfer_condition(shared_ptr<container::value_container> container)
-{
-	if (container == nullptr)
-	{
-		return;
-	}
+void transfer_condition(shared_ptr<container::value_container> container) {
+  if (container == nullptr) {
+    return;
+  }
 
-	if (container->message_type() != L"transfer_condition")
-	{
-		return;
-	}
+  if (container->message_type() != L"transfer_condition") {
+    return;
+  }
 
-	if (container->get_value(L"percentage")->to_ushort() == 0)
-	{
-		logger::handle().write(logging_level::information,
-			fmt::format(L"started upload: [{}]", container->get_value(L"indication_id")->to_string()));
+  if (container->get_value(L"percentage")->to_ushort() == 0) {
+    logger::handle().write(
+        logging_level::information,
+        fmt::format(L"started upload: [{}]",
+                    container->get_value(L"indication_id")->to_string()));
 
-		return;
-	}
+    return;
+  }
 
-	logger::handle().write(logging_level::information,
-		fmt::format(L"received percentage: [{}] {}%", container->get_value(L"indication_id")->to_string(),
-			container->get_value(L"percentage")->to_ushort()));
+  logger::handle().write(
+      logging_level::information,
+      fmt::format(L"received percentage: [{}] {}%",
+                  container->get_value(L"indication_id")->to_string(),
+                  container->get_value(L"percentage")->to_ushort()));
 
-	if (container->get_value(L"completed")->to_boolean())
-	{
-		logger::handle().write(logging_level::information,
-			fmt::format(L"completed upload: [{}]", container->get_value(L"indication_id")->to_string()));
+  if (container->get_value(L"completed")->to_boolean()) {
+    logger::handle().write(
+        logging_level::information,
+        fmt::format(L"completed upload: [{}]",
+                    container->get_value(L"indication_id")->to_string()));
 
-		_promise_status.set_value(true);
+    _promise_status.set_value(true);
 
-		return;
-	}
+    return;
+  }
 
-	if (container->get_value(L"percentage")->to_ushort() == 100)
-	{
-		logger::handle().write(logging_level::information,
-			fmt::format(L"completed upload: [{}] success-{}, fail-{}", container->get_value(L"indication_id")->to_string(),
-				container->get_value(L"completed_count")->to_ushort(), container->get_value(L"failed_count")->to_ushort()));
+  if (container->get_value(L"percentage")->to_ushort() == 100) {
+    logger::handle().write(
+        logging_level::information,
+        fmt::format(L"completed upload: [{}] success-{}, fail-{}",
+                    container->get_value(L"indication_id")->to_string(),
+                    container->get_value(L"completed_count")->to_ushort(),
+                    container->get_value(L"failed_count")->to_ushort()));
 
-		_promise_status.set_value(false);
-	}
+    _promise_status.set_value(false);
+  }
 }
 
-void request_upload_files(void)
-{
-	vector<wstring> sources = folder::get_files(source_folder);
-	if (sources.empty())
-	{
-		logger::handle().write(logging_level::error,
-			fmt::format(L"there is no file: {}", source_folder));
+void request_upload_files(void) {
+  vector<wstring> sources = folder::get_files(source_folder);
+  if (sources.empty()) {
+    logger::handle().write(logging_level::error,
+                           fmt::format(L"there is no file: {}", source_folder));
 
-		return;
-	}
+    return;
+  }
 
-	vector<shared_ptr<container::value>> files;
+  vector<shared_ptr<container::value>> files;
 
-	files.push_back(make_shared<container::string_value>(L"indication_id", L"upload_test"));
-	for (auto& source : sources)
-	{
-		files.push_back(make_shared<container::container_value>(L"file", vector<shared_ptr<container::value>> {
-			make_shared<container::string_value>(L"source", source),
-			make_shared<container::string_value>(L"target", converter::replace2(source, source_folder, target_folder))
-		}));
-	}
+  files.push_back(
+      make_shared<container::string_value>(L"indication_id", L"upload_test"));
+  for (auto &source : sources) {
+    files.push_back(make_shared<container::container_value>(
+        L"file", vector<shared_ptr<container::value>>{
+                     make_shared<container::string_value>(L"source", source),
+                     make_shared<container::string_value>(
+                         L"target", converter::replace2(source, source_folder,
+                                                        target_folder))}));
+  }
 
-	shared_ptr<container::value_container> container =
-		make_shared<container::value_container>(L"main_server", L"", L"upload_files", files);
+  shared_ptr<container::value_container> container =
+      make_shared<container::value_container>(L"main_server", L"",
+                                              L"upload_files", files);
 
-	client->send(container);
+  client->send(container);
 }
