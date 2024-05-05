@@ -42,30 +42,33 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 using namespace std;
 
-class file_manager {
+class file_manager
+{
 public:
-  file_manager(void);
-  ~file_manager(void);
+	file_manager(void);
+	~file_manager(void);
 
 public:
-  bool set(const wstring &indication_id, const wstring &source_id,
-           const wstring &source_sub_id, const vector<wstring> &file_list);
+	bool set(const wstring& indication_id,
+			 const wstring& source_id,
+			 const wstring& source_sub_id,
+			 const vector<wstring>& file_list);
 
-  shared_ptr<container::value_container> received(const wstring &indication_id,
-                                                  const wstring &file_path);
+	shared_ptr<container::value_container> received(
+		const wstring& indication_id, const wstring& file_path);
 
 private:
-  void clear(const map<wstring, unsigned short>::iterator &percentage_iter,
-             const map<wstring, pair<wstring, wstring>>::iterator &ids_iter,
-             const map<wstring, vector<wstring>>::iterator &transferring_iter,
-             const map<wstring, vector<wstring>>::iterator &transferred_iter,
-             const map<wstring, vector<wstring>>::iterator &failed_iter);
+	void clear(const map<wstring, unsigned short>::iterator& percentage_iter,
+			   const map<wstring, pair<wstring, wstring>>::iterator& ids_iter,
+			   const map<wstring, vector<wstring>>::iterator& transferring_iter,
+			   const map<wstring, vector<wstring>>::iterator& transferred_iter,
+			   const map<wstring, vector<wstring>>::iterator& failed_iter);
 
 private:
-  mutex _mutex;
-  map<wstring, unsigned short> _transferred_percentage;
-  map<wstring, pair<wstring, wstring>> _transferring_ids;
-  map<wstring, vector<wstring>> _transferring_list;
-  map<wstring, vector<wstring>> _transferred_list;
-  map<wstring, vector<wstring>> _failed_list;
+	mutex _mutex;
+	map<wstring, unsigned short> _transferred_percentage;
+	map<wstring, pair<wstring, wstring>> _transferring_ids;
+	map<wstring, vector<wstring>> _transferring_list;
+	map<wstring, vector<wstring>> _transferred_list;
+	map<wstring, vector<wstring>> _failed_list;
 };

@@ -47,126 +47,146 @@ file_manager::file_manager(void) {}
 
 file_manager::~file_manager(void) {}
 
-bool file_manager::set(const wstring &indication_id, const wstring &source_id,
-                       const wstring &source_sub_id,
-                       const vector<wstring> &file_list) {
-  scoped_lock<mutex> guard(_mutex);
+bool file_manager::set(const wstring& indication_id,
+					   const wstring& source_id,
+					   const wstring& source_sub_id,
+					   const vector<wstring>& file_list)
+{
+	scoped_lock<mutex> guard(_mutex);
 
-  auto target = _transferring_list.find(indication_id);
-  if (target != _transferring_list.end()) {
-    return false;
-  }
+	auto target = _transferring_list.find(indication_id);
+	if (target != _transferring_list.end())
+	{
+		return false;
+	}
 
-  _transferring_list.insert({indication_id, file_list});
-  _transferring_ids.insert({indication_id, {source_id, source_sub_id}});
-  _transferred_list.insert({indication_id, vector<wstring>()});
-  _failed_list.insert({indication_id, vector<wstring>()});
-  _transferred_percentage.insert({indication_id, 0});
+	_transferring_list.insert({ indication_id, file_list });
+	_transferring_ids.insert({ indication_id, { source_id, source_sub_id } });
+	_transferred_list.insert({ indication_id, vector<wstring>() });
+	_failed_list.insert({ indication_id, vector<wstring>() });
+	_transferred_percentage.insert({ indication_id, 0 });
 
-  return true;
+	return true;
 }
 
-shared_ptr<container::value_container>
-file_manager::received(const wstring &indication_id, const wstring &file_path) {
-  scoped_lock<mutex> guard(_mutex);
+shared_ptr<container::value_container> file_manager::received(
+	const wstring& indication_id, const wstring& file_path)
+{
+	scoped_lock<mutex> guard(_mutex);
 
-  auto ids = _transferring_ids.find(indication_id);
-  if (ids == _transferring_ids.end()) {
-    return nullptr;
-  }
+	auto ids = _transferring_ids.find(indication_id);
+	if (ids == _transferring_ids.end())
+	{
+		return nullptr;
+	}
 
-  auto source = _transferring_list.find(indication_id);
-  if (source == _transferring_list.end()) {
-    return nullptr;
-  }
+	auto source = _transferring_list.find(indication_id);
+	if (source == _transferring_list.end())
+	{
+		return nullptr;
+	}
 
-  auto target = _transferred_list.find(indication_id);
-  if (target == _transferred_list.end()) {
-    return nullptr;
-  }
+	auto target = _transferred_list.find(indication_id);
+	if (target == _transferred_list.end())
+	{
+		return nullptr;
+	}
 
-  auto fail = _failed_list.find(indication_id);
-  if (fail == _failed_list.end()) {
-    return nullptr;
-  }
+	auto fail = _failed_list.find(indication_id);
+	if (fail == _failed_list.end())
+	{
+		return nullptr;
+	}
 
-  auto percentage = _transferred_percentage.find(indication_id);
-  if (percentage == _transferred_percentage.end()) {
-    return nullptr;
-  }
+	auto percentage = _transferred_percentage.find(indication_id);
+	if (percentage == _transferred_percentage.end())
+	{
+		return nullptr;
+	}
 
-  if (file_path.empty()) {
-    fail->second.push_back(file_path);
-  } else {
-    target->second.push_back(file_path);
-  }
+	if (file_path.empty())
+	{
+		fail->second.push_back(file_path);
+	}
+	else
+	{
+		target->second.push_back(file_path);
+	}
 
-  unsigned short temp = (unsigned short)(((double)target->second.size() /
-                                          (double)source->second.size()) *
-                                         100);
-  if (percentage->second != temp) {
-    percentage->second = temp;
+	unsigned short temp = (unsigned short)(((double)target->second.size()
+											/ (double)source->second.size())
+										   * 100);
+	if (percentage->second != temp)
+	{
+		percentage->second = temp;
 
-    if (temp != 100) {
-      return make_shared<container::value_container>(
-          ids->second.first, ids->second.second, L"transfer_condition",
-          vector<shared_ptr<container::value>>{
-              make_shared<container::string_value>(L"indication_id",
-                                                   indication_id),
-              make_shared<container::ushort_value>(L"percentage", temp)});
-    }
+		if (temp != 100)
+		{
+			return make_shared<container::value_container>(
+				ids->second.first, ids->second.second, L"transfer_condition",
+				vector<shared_ptr<container::value>>{
+					make_shared<container::string_value>(L"indication_id",
+														 indication_id),
+					make_shared<container::ushort_value>(L"percentage",
+														 temp) });
+		}
 
-    size_t completed = target->second.size();
-    size_t failed = fail->second.size();
+		size_t completed = target->second.size();
+		size_t failed = fail->second.size();
 
-    clear(percentage, ids, source, target, fail);
+		clear(percentage, ids, source, target, fail);
 
-    return make_shared<container::value_container>(
-        ids->second.first, ids->second.second, L"transfer_condition",
-        vector<shared_ptr<container::value>>{
-            make_shared<container::string_value>(L"indication_id",
-                                                 indication_id),
-            make_shared<container::ushort_value>(L"percentage", temp),
-            make_shared<container::ullong_value>(L"completed_count", completed),
-            make_shared<container::ullong_value>(L"failed_count", failed),
-            make_shared<container::bool_value>(L"completed", true)});
-  }
+		return make_shared<container::value_container>(
+			ids->second.first, ids->second.second, L"transfer_condition",
+			vector<shared_ptr<container::value>>{
+				make_shared<container::string_value>(L"indication_id",
+													 indication_id),
+				make_shared<container::ushort_value>(L"percentage", temp),
+				make_shared<container::ullong_value>(L"completed_count",
+													 completed),
+				make_shared<container::ullong_value>(L"failed_count", failed),
+				make_shared<container::bool_value>(L"completed", true) });
+	}
 
-  if (temp != 100) {
-    return nullptr;
-  }
+	if (temp != 100)
+	{
+		return nullptr;
+	}
 
-  if (source->second.size() == (target->second.size() + fail->second.size())) {
-    size_t completed = target->second.size();
-    size_t failed = fail->second.size();
-    wstring source_id = ids->second.first;
-    wstring source_sub_id = ids->second.second;
+	if (source->second.size() == (target->second.size() + fail->second.size()))
+	{
+		size_t completed = target->second.size();
+		size_t failed = fail->second.size();
+		wstring source_id = ids->second.first;
+		wstring source_sub_id = ids->second.second;
 
-    clear(percentage, ids, source, target, fail);
+		clear(percentage, ids, source, target, fail);
 
-    return make_shared<container::value_container>(
-        source_id, source_sub_id, L"transfer_condition",
-        vector<shared_ptr<container::value>>{
-            make_shared<container::string_value>(L"indication_id",
-                                                 indication_id),
-            make_shared<container::ushort_value>(L"percentage", temp),
-            make_shared<container::ullong_value>(L"completed_count", completed),
-            make_shared<container::ullong_value>(L"failed_count", failed),
-            make_shared<container::bool_value>(L"completed", true)});
-  }
+		return make_shared<container::value_container>(
+			source_id, source_sub_id, L"transfer_condition",
+			vector<shared_ptr<container::value>>{
+				make_shared<container::string_value>(L"indication_id",
+													 indication_id),
+				make_shared<container::ushort_value>(L"percentage", temp),
+				make_shared<container::ullong_value>(L"completed_count",
+													 completed),
+				make_shared<container::ullong_value>(L"failed_count", failed),
+				make_shared<container::bool_value>(L"completed", true) });
+	}
 
-  return nullptr;
+	return nullptr;
 }
 
 void file_manager::clear(
-    const map<wstring, unsigned short>::iterator &percentage_iter,
-    const map<wstring, pair<wstring, wstring>>::iterator &ids_iter,
-    const map<wstring, vector<wstring>>::iterator &transferring_iter,
-    const map<wstring, vector<wstring>>::iterator &transferred_iter,
-    const map<wstring, vector<wstring>>::iterator &failed_iter) {
-  _transferring_list.erase(transferring_iter);
-  _transferring_ids.erase(ids_iter);
-  _transferred_list.erase(transferred_iter);
-  _failed_list.erase(failed_iter);
-  _transferred_percentage.erase(percentage_iter);
+	const map<wstring, unsigned short>::iterator& percentage_iter,
+	const map<wstring, pair<wstring, wstring>>::iterator& ids_iter,
+	const map<wstring, vector<wstring>>::iterator& transferring_iter,
+	const map<wstring, vector<wstring>>::iterator& transferred_iter,
+	const map<wstring, vector<wstring>>::iterator& failed_iter)
+{
+	_transferring_list.erase(transferring_iter);
+	_transferring_ids.erase(ids_iter);
+	_transferred_list.erase(transferred_iter);
+	_failed_list.erase(failed_iter);
+	_transferred_percentage.erase(percentage_iter);
 }
