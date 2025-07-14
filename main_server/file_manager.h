@@ -32,7 +32,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 
-#include "container.h"
+#include "container/container.h"
+#include "core/value.h"
+#include "values/string_value.h"
 
 #include <map>
 #include <memory>
@@ -41,6 +43,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <vector>
 
 using namespace std;
+using namespace container_module;
 
 class file_manager
 {
@@ -54,7 +57,7 @@ public:
 			 const wstring& source_sub_id,
 			 const vector<wstring>& file_list);
 
-	shared_ptr<container::value_container> received(
+	shared_ptr<value_container> received(
 		const wstring& indication_id, const wstring& file_path);
 
 private:

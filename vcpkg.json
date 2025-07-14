@@ -1,0 +1,15 @@
+{
+  "name": "file-manager",
+  "version": "1.0.0",
+  "dependencies": [
+    "lz4",
+    "fmt",
+    "cryptopp",
+    "asio",
+    "crossguid",
+    "libpq",
+    "gtest",
+    "nlohmann-json",
+    "cpp-httplib"
+  ]
+}

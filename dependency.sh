@@ -10,4 +10,14 @@ if [ ! -z "$1" ]; then
     fi
 fi
 
+# Run messaging_system dependency script
 /bin/bash ./messaging_system/dependency.sh
+
+# Install additional dependencies needed for file_manager
+cd ..
+if [ -d "./vcpkg/" ]; then
+    cd vcpkg
+    ./vcpkg install cpp-httplib --recurse
+    cd ..
+fi
+cd file_manager

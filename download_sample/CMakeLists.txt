@@ -1,7 +1,7 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.14)
 
 SET(PROGRAM_NAME download_sample)
-SET(CMAKE_CXX_STANDARD 17)
+SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 SET(SOURCES download_sample.cpp)
@@ -10,10 +10,17 @@ PROJECT(${PROGRAM_NAME})
 
 ADD_EXECUTABLE(${PROGRAM_NAME} ${SOURCES})
 
-INCLUDE_DIRECTORIES(../messaging_system/utilities)
-INCLUDE_DIRECTORIES(../messaging_system/container)
-INCLUDE_DIRECTORIES(../messaging_system/threads)
-INCLUDE_DIRECTORIES(../messaging_system/network)
+# Find required packages
+find_package(fmt CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 
-ADD_DEPENDENCIES(${PROGRAM_NAME} network)
-TARGET_LINK_LIBRARIES(${PROGRAM_NAME} PUBLIC network)
+TARGET_INCLUDE_DIRECTORIES(${PROGRAM_NAME} PUBLIC 
+    ../messaging_system/thread_system/sources/utilities
+    ../messaging_system/thread_system/sources/utilities/parsing
+    ../messaging_system
+    ../messaging_system/container
+    ../messaging_system/network
+)
+
+ADD_DEPENDENCIES(${PROGRAM_NAME} utilities container network)
+TARGET_LINK_LIBRARIES(${PROGRAM_NAME} PUBLIC utilities container network fmt::fmt)

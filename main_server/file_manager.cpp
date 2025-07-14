@@ -32,16 +32,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "file_manager.h"
 
-#include "constexpr_string.h"
-#include "converting.h"
+#include "utilities/conversion/convert_string.h"
 
-#include "value.h"
-#include "values/bool_value.h"
-#include "values/string_value.h"
-#include "values/ullong_value.h"
-#include "values/ushort_value.h"
+#include "container/core/value.h"
+#include "container/values/bool_value.h"
+#include "container/values/string_value.h"
+#include "container/values/numeric_value.h"
+#include "container/core/value_types.h"
 
-using namespace converting;
+using namespace utility_module;
+using namespace container_module;
 
 file_manager::file_manager(void) {}
 
@@ -69,7 +69,7 @@ bool file_manager::set(const wstring& indication_id,
 	return true;
 }
 
-shared_ptr<container::value_container> file_manager::received(
+shared_ptr<value_container> file_manager::received(
 	const wstring& indication_id, const wstring& file_path)
 {
 	scoped_lock<mutex> guard(_mutex);
@@ -122,12 +122,23 @@ shared_ptr<container::value_container> file_manager::received(
 
 		if (temp != 100)
 		{
-			return make_shared<container::value_container>(
-				ids->second.first, ids->second.second, L"transfer_condition",
-				vector<shared_ptr<container::value>>{
-					make_shared<container::string_value>(L"indication_id",
-														 indication_id),
-					make_shared<container::ushort_value>(L"percentage",
+			return make_shared<value_container>(
+				[&]() -> std::string {
+					auto [str, err] = convert_string::to_string(ids->second.first);
+					return str.value_or("");
+				}(),
+				[&]() -> std::string {
+					auto [str, err] = convert_string::to_string(ids->second.second);
+					return str.value_or("");
+				}(),
+				"transfer_condition",
+				vector<shared_ptr<value>>{
+					make_shared<string_value>("indication_id",
+														 [&]() -> std::string {
+															 auto [str, err] = convert_string::to_string(std::wstring(indication_id));
+															 return str.value_or("");
+														 }()),
+					make_shared<numeric_value<unsigned short, value_types::ushort_value>>("percentage",
 														 temp) });
 		}
 
@@ -136,16 +147,24 @@ shared_ptr<container::value_container> file_manager::received(
 
 		clear(percentage, ids, source, target, fail);
 
-		return make_shared<container::value_container>(
-			ids->second.first, ids->second.second, L"transfer_condition",
-			vector<shared_ptr<container::value>>{
-				make_shared<container::string_value>(L"indication_id",
-													 indication_id),
-				make_shared<container::ushort_value>(L"percentage", temp),
-				make_shared<container::ullong_value>(L"completed_count",
+		return make_shared<value_container>(
+			[&]() -> std::string {
+				auto [str, err] = convert_string::to_string(ids->second.first);
+				return str.value_or("");
+			}(),
+			[&]() -> std::string {
+				auto [str, err] = convert_string::to_string(ids->second.second);
+				return str.value_or("");
+			}(),
+			"transfer_condition",
+			vector<shared_ptr<value>>{
+				make_shared<string_value>("indication_id",
+													 std::get<0>(convert_string::to_string(std::wstring(indication_id))).value_or("")),
+				make_shared<numeric_value<unsigned short, value_types::ushort_value>>("percentage", temp),
+				make_shared<numeric_value<unsigned long long, value_types::ullong_value>>("completed_count",
 													 completed),
-				make_shared<container::ullong_value>(L"failed_count", failed),
-				make_shared<container::bool_value>(L"completed", true) });
+				make_shared<numeric_value<unsigned long long, value_types::ullong_value>>("failed_count", failed),
+				make_shared<bool_value>("completed", true) });
 	}
 
 	if (temp != 100)
@@ -162,16 +181,24 @@ shared_ptr<container::value_container> file_manager::received(
 
 		clear(percentage, ids, source, target, fail);
 
-		return make_shared<container::value_container>(
-			source_id, source_sub_id, L"transfer_condition",
-			vector<shared_ptr<container::value>>{
-				make_shared<container::string_value>(L"indication_id",
-													 indication_id),
-				make_shared<container::ushort_value>(L"percentage", temp),
-				make_shared<container::ullong_value>(L"completed_count",
+		return make_shared<value_container>(
+			[&]() -> std::string {
+				auto [str, err] = convert_string::to_string(source_id);
+				return str.value_or("");
+			}(),
+			[&]() -> std::string {
+				auto [str, err] = convert_string::to_string(source_sub_id);
+				return str.value_or("");
+			}(),
+			"transfer_condition",
+			vector<shared_ptr<value>>{
+				make_shared<string_value>("indication_id",
+													 std::get<0>(convert_string::to_string(std::wstring(indication_id))).value_or("")),
+				make_shared<numeric_value<unsigned short, value_types::ushort_value>>("percentage", temp),
+				make_shared<numeric_value<unsigned long long, value_types::ullong_value>>("completed_count",
 													 completed),
-				make_shared<container::ullong_value>(L"failed_count", failed),
-				make_shared<container::bool_value>(L"completed", true) });
+				make_shared<numeric_value<unsigned long long, value_types::ullong_value>>("failed_count", failed),
+				make_shared<bool_value>("completed", true) });
 	}
 
 	return nullptr;

@@ -31,15 +31,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *****************************************************************************/
 
 #include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
+#include <map>
+#include <functional>
+#include <future>
 
-#include "argument_parser.h"
-#include "converting.h"
-#include "file_handler.h"
-#include "folder_handler.h"
-#include "logging.h"
-#include "messaging_client.h"
+#include "utilities/parsing/argument_parser.h"
+#include "utilities/conversion/convert_string.h"
+#include "utilities/io/file_handler.h"
+#include "logger/core/logger.h"
+#include "network/network.h"
 
-#include "container.h"
+#include "container/container.h"
 #include "values/container_value.h"
 #include "values/string_value.h"
 
@@ -48,158 +53,163 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <future>
 
-constexpr auto PROGRAM_NAME = L"download_sample";
+constexpr auto PROGRAM_NAME = "download_sample";
 
-using namespace logging;
-using namespace network;
-using namespace converting;
-using namespace file_handler;
-using namespace folder_handler;
-using namespace argument_parser;
+using namespace log_module;
+using namespace network_module;
+using namespace container_module;
+using namespace utility_module;
+// file_handler는 utility_module에 포함됨
+// argument_parser는 utility_module에 포함됨
 
 #ifdef _DEBUG
 bool encrypt_mode = false;
 bool compress_mode = false;
-logging_level log_level = logging_level::parameter;
-logging_styles logging_style = logging_styles::console_only;
+log_types log_level = log_types::Parameter;
+bool logging_style = true;
 #else
 bool encrypt_mode = true;
 bool compress_mode = true;
-logging_level log_level = logging_level::information;
-logging_styles logging_style = logging_styles::file_only;
+log_types log_level = log_types::Information;
+bool logging_style = false;
 #endif
 
-wstring source_folder = L"";
-wstring target_folder = L"";
-wstring connection_key = L"middle_connection_key";
-wstring server_ip = L"127.0.0.1";
+std::wstring source_folder = L"";
+std::wstring target_folder = L"";
+std::wstring connection_key = L"middle_connection_key";
+std::wstring server_ip = L"127.0.0.1";
 unsigned short server_port = 8642;
 unsigned short high_priority_count = 1;
 unsigned short normal_priority_count = 2;
 unsigned short low_priority_count = 3;
 
-promise<bool> _promise_status;
-future<bool> _future_status;
-shared_ptr<messaging_client> client = nullptr;
+std::promise<bool> _promise_status;
+std::future<bool> _future_status;
+std::shared_ptr<messaging_client> client = nullptr;
 
-map<wstring, function<void(shared_ptr<container::value_container>)>>
+std::map<std::string, std::function<void(std::shared_ptr<value_container>)>>
 	_registered_messages;
 
 bool parse_arguments(argument_manager& arguments);
-void connection(const wstring& target_id,
-				const wstring& target_sub_id,
+void connection(const std::wstring& target_id,
+				const std::wstring& target_sub_id,
 				const bool& condition);
 
-void received_message(shared_ptr<container::value_container> container);
-void transfer_condition(shared_ptr<container::value_container> container);
+void received_message(std::shared_ptr<value_container> container);
+void transfer_condition(std::shared_ptr<value_container> container);
 void request_download_files(void);
 
 int main(int argc, char* argv[])
 {
-	argument_manager arguments(argc, argv);
+	argument_manager arguments;
+	auto result = arguments.try_parse(argc, argv);
+	if (result.has_value()) {
+		std::wcout << "Argument parsing failed: " << std::wstring(result.value().begin(), result.value().end()) << std::endl;
+		return 0;
+	}
 	if (!parse_arguments(arguments))
 	{
 		return 0;
 	}
 
-	logger::handle().set_write_console(logging_style);
-	logger::handle().set_target_level(log_level);
-	logger::handle().start(PROGRAM_NAME);
+	log_module::set_title(PROGRAM_NAME);
+	if (logging_style) {
+		log_module::console_target(log_level);
+	}
+	log_module::file_target(log_level);
+	log_module::start();
 
-	_registered_messages.insert({ L"transfer_condition", transfer_condition });
+	_registered_messages.insert({ "transfer_condition", transfer_condition });
 
-	client = make_shared<messaging_client>(PROGRAM_NAME);
-	client->set_compress_mode(compress_mode);
-	client->set_connection_key(connection_key);
-	client->set_session_types(session_types::message_line);
-	client->set_connection_notification(&connection);
-	client->set_message_notification(&received_message);
-	client->start(server_ip, server_port, high_priority_count,
-				  normal_priority_count, low_priority_count);
+	client = std::make_shared<messaging_client>(PROGRAM_NAME);
+	// TODO: set_compress_mode, set_connection_key, set_session_types, set_connection_notification, set_message_notification APIs are not available in the new messaging_client
+	// Need to implement these features or use alternative approach
+	client->start_client(std::get<0>(convert_string::to_string(server_ip)).value_or(""), server_port);
 
 	_future_status = _promise_status.get_future();
 	_future_status.wait();
 
-	client->stop();
+	client->stop_client();
 
-	logger::handle().stop();
+	log_module::stop();
 
 	return 0;
 }
 
 bool parse_arguments(argument_manager& arguments)
 {
-	auto bool_target = arguments.to_bool(L"--encrypt_mode");
-	if (bool_target != nullopt)
+	auto bool_target = arguments.to_bool("--encrypt_mode");
+	if (bool_target != std::nullopt)
 	{
 		encrypt_mode = *bool_target;
 	}
 
-	bool_target = arguments.to_bool(L"--compress_mode");
-	if (bool_target != nullopt)
+	bool_target = arguments.to_bool("--compress_mode");
+	if (bool_target != std::nullopt)
 	{
 		compress_mode = *bool_target;
 	}
 
-	auto ushort_target = arguments.to_ushort(L"--server_port");
-	if (ushort_target != nullopt)
+	auto ushort_target = arguments.to_ushort("--server_port");
+	if (ushort_target != std::nullopt)
 	{
 		server_port = *ushort_target;
 	}
 
-	ushort_target = arguments.to_ushort(L"--high_priority_count");
-	if (ushort_target != nullopt)
+	ushort_target = arguments.to_ushort("--high_priority_count");
+	if (ushort_target != std::nullopt)
 	{
 		high_priority_count = *ushort_target;
 	}
 
-	ushort_target = arguments.to_ushort(L"--normal_priority_count");
-	if (ushort_target != nullopt)
+	ushort_target = arguments.to_ushort("--normal_priority_count");
+	if (ushort_target != std::nullopt)
 	{
 		normal_priority_count = *ushort_target;
 	}
 
-	ushort_target = arguments.to_ushort(L"--low_priority_count");
-	if (ushort_target != nullopt)
+	ushort_target = arguments.to_ushort("--low_priority_count");
+	if (ushort_target != std::nullopt)
 	{
 		low_priority_count = *ushort_target;
 	}
 
-	auto int_target = arguments.to_int(L"--logging_level");
-	if (int_target != nullopt)
+	auto int_target = arguments.to_int("--log_types");
+	if (int_target != std::nullopt)
 	{
-		log_level = (logging_level)*int_target;
+		log_level = (log_types)*int_target;
 	}
 
-	bool_target = arguments.to_bool(L"--write_console_only");
-	if (bool_target != nullopt && *bool_target)
+	bool_target = arguments.to_bool("--write_console_only");
+	if (bool_target != std::nullopt && *bool_target)
 	{
-		logging_style = logging_styles::console_only;
+		logging_style = true;
 
 		return true;
 	}
 
-	bool_target = arguments.to_bool(L"--write_console");
-	if (bool_target != nullopt && *bool_target)
+	bool_target = arguments.to_bool("--write_console");
+	if (bool_target != std::nullopt && *bool_target)
 	{
-		logging_style = logging_styles::file_and_console;
+		logging_style = true;
 
 		return true;
 	}
 
-	logging_style = logging_styles::file_only;
+	logging_style = false;
 
 	return true;
 }
 
-void connection(const wstring& target_id,
-				const wstring& target_sub_id,
+void connection(const std::wstring& target_id,
+				const std::wstring& target_sub_id,
 				const bool& condition)
 {
-	logger::handle().write(
-		logging_level::information,
-		fmt::format(L"a client on main server: {}[{}] is {}", target_id,
-					target_sub_id, condition ? L"connected" : L"disconnected"));
+	auto [tid_str, tid_err] = convert_string::to_string(target_id);
+	auto [tsid_str, tsid_err] = convert_string::to_string(target_sub_id);
+	log_module::write_information(
+		fmt::format("a client on main server: {}[{}] is {}", tid_str.value_or(""),
+					tsid_str.value_or(""), condition ? "connected" : "disconnected").c_str());
 
 	if (condition)
 	{
@@ -207,7 +217,7 @@ void connection(const wstring& target_id,
 	}
 }
 
-void received_message(shared_ptr<container::value_container> container)
+void received_message(std::shared_ptr<value_container> container)
 {
 	if (container == nullptr)
 	{
@@ -222,59 +232,54 @@ void received_message(shared_ptr<container::value_container> container)
 		return;
 	}
 
-	logger::handle().write(
-		logging_level::sequence,
-		fmt::format(L"unknown message: {}", container->serialize()));
+	log_module::write_sequence(
+		fmt::format("unknown message: {}", container->serialize()).c_str());
 }
 
-void transfer_condition(shared_ptr<container::value_container> container)
+void transfer_condition(std::shared_ptr<value_container> container)
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-	if (container->message_type() != L"transfer_condition")
+	if (container->message_type() != "transfer_condition")
 	{
 		return;
 	}
 
-	if (container->get_value(L"percentage")->to_ushort() == 0)
+	if (container->get_value("percentage")->to_ushort() == 0)
 	{
-		logger::handle().write(
-			logging_level::information,
-			fmt::format(L"started download: [{}]",
-						container->get_value(L"indication_id")->to_string()));
+		log_module::write_information(
+			fmt::format("started download: [{}]",
+						container->get_value("indication_id")->to_string()).c_str());
 
 		return;
 	}
 
-	logger::handle().write(
-		logging_level::information,
-		fmt::format(L"received percentage: [{}] {}%",
-					container->get_value(L"indication_id")->to_string(),
-					container->get_value(L"percentage")->to_ushort()));
+	log_module::write_information(
+		fmt::format("received percentage: [{}] {}%",
+					container->get_value("indication_id")->to_string(),
+					container->get_value("percentage")->to_ushort()).c_str());
 
-	if (container->get_value(L"completed")->to_boolean())
+	if (container->get_value("completed")->to_boolean())
 	{
-		logger::handle().write(
-			logging_level::information,
-			fmt::format(L"completed download: [{}]",
-						container->get_value(L"indication_id")->to_string()));
+		log_module::write_information(
+			fmt::format("completed download: [{}]",
+						container->get_value("indication_id")->to_string()).c_str());
 
 		_promise_status.set_value(true);
 
 		return;
 	}
 
-	if (container->get_value(L"percentage")->to_ushort() == 100)
+	if (container->get_value("percentage")->to_ushort() == 100)
 	{
-		logger::handle().write(
-			logging_level::information,
-			fmt::format(L"completed download: [{}] success-{}, fail-{}",
-						container->get_value(L"indication_id")->to_string(),
-						container->get_value(L"completed_count")->to_ushort(),
-						container->get_value(L"failed_count")->to_ushort()));
+		log_module::write_information(
+			fmt::format("completed download: [{}] success-{}, fail-{}",
+						container->get_value("indication_id")->to_string(),
+						container->get_value("completed_count")->to_ushort(),
+						container->get_value("failed_count")->to_ushort()).c_str());
 
 		_promise_status.set_value(false);
 	}
@@ -282,34 +287,38 @@ void transfer_condition(shared_ptr<container::value_container> container)
 
 void request_download_files(void)
 {
-	vector<wstring> sources = folder::get_files(source_folder);
+	// TODO: folder::get_files() is not available in current messaging_system structure
+	// Need to implement directory traversal using std::filesystem or provide alternative
+	std::vector<std::wstring> sources; // = folder::get_files(source_folder);
 	if (sources.empty())
 	{
-		logger::handle().write(
-			logging_level::error,
-			fmt::format(L"there is no file: {}", source_folder));
+		auto [sf_str, sf_err] = convert_string::to_string(source_folder);
+		log_module::write_error(
+			fmt::format("there is no file: {}", sf_str.value_or("")).c_str());
 
 		return;
 	}
 
-	vector<shared_ptr<container::value>> files;
+	std::vector<std::shared_ptr<value>> files;
 
-	files.push_back(make_shared<container::string_value>(L"indication_id",
-														 L"download_test"));
+	files.push_back(std::make_shared<string_value>("indication_id",
+														 "download_test"));
 	for (auto& source : sources)
 	{
-		files.push_back(make_shared<container::container_value>(
-			L"file",
-			vector<shared_ptr<container::value>>{
-				make_shared<container::string_value>(L"source", source),
-				make_shared<container::string_value>(
-					L"target", converter::replace2(source, source_folder,
-												   target_folder)) }));
+		auto [src_str, src_err] = convert_string::to_string(source);
+		// TODO: convert_string::replace API needs to be checked
+		files.push_back(std::make_shared<container_value>(
+			"file",
+			std::vector<std::shared_ptr<value>>{
+				std::make_shared<string_value>("source", src_str.value_or("")),
+				std::make_shared<string_value>("target", "") }));
 	}
 
-	shared_ptr<container::value_container> container
-		= make_shared<container::value_container>(L"main_server", L"",
-												  L"download_files", files);
+	std::shared_ptr<value_container> container
+		= std::make_shared<value_container>("main_server", "",
+												  "download_files", files);
 
-	client->send(container);
+	// TODO: client->send(container) API is not available in the new messaging_client
+	// Need to convert container to bytes and use send_packet
+	// client->send_packet(container_to_bytes(container));
 }

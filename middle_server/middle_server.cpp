@@ -31,20 +31,22 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *****************************************************************************/
 
 #include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
+#include <map>
+#include <functional>
 
-#include "argument_parser.h"
-#include "compressing.h"
-#include "converting.h"
-#include "file_handler.h"
-#include "file_manager.h"
-#include "logging.h"
-#include "messaging_client.h"
-#include "messaging_server.h"
+#include "utilities/parsing/argument_parser.h"
+#include "utilities/conversion/convert_string.h"
+#include "utilities/io/file_handler.h"
+#include "logger/core/logger.h"
+#include "network/network.h"
 
-#include "value.h"
+#include "container/container.h"
 #include "values/bool_value.h"
 #include "values/string_value.h"
-#include "values/ushort_value.h"
+#include "values/numeric_value.h"
 
 #ifdef _CONSOLE
 #include <Windows.h>
@@ -55,26 +57,28 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "fmt/format.h"
 #include "fmt/xchar.h"
 
-constexpr auto PROGRAM_NAME = L"middle_server";
+#include "file_manager.h"
+
+constexpr auto PROGRAM_NAME = "middle_server";
 
 using namespace std;
-using namespace logging;
-using namespace network;
-using namespace converting;
-using namespace compressing;
-using namespace file_handler;
-using namespace argument_parser;
+using namespace log_module;
+using namespace network_module;
+using namespace container_module;
+using namespace utility_module;
+// file_handler는 utility_module에 포함됨
+// argument_parser는 utility_module에 포함됨
 
 #ifdef _DEBUG
 bool encrypt_mode = false;
 bool compress_mode = false;
-logging_level log_level = logging_level::parameter;
-logging_styles logging_style = logging_styles::console_only;
+log_types log_level = log_types::Parameter;
+bool logging_style = true;
 #else
 bool encrypt_mode = true;
 bool compress_mode = true;
-logging_level log_level = logging_level::information;
-logging_styles logging_style = logging_styles::file_only;
+log_types log_level = log_types::Information;
+bool logging_style = false;
 #endif
 unsigned short compress_block_size = 1024;
 
@@ -88,7 +92,7 @@ unsigned short normal_priority_count = 4;
 unsigned short low_priority_count = 4;
 size_t session_limit_count = 0;
 
-map<wstring, function<void(shared_ptr<container::value_container>)>>
+map<string, function<void(shared_ptr<value_container>)>>
 	_file_commands;
 
 shared_ptr<file_manager> _file_manager = nullptr;
@@ -109,22 +113,27 @@ void connection_from_file_line(const wstring& target_id,
 							   const bool& condition);
 
 void received_message_from_middle_server(
-	shared_ptr<container::value_container> container);
+	shared_ptr<value_container> container);
 void received_message_from_file_line(
-	shared_ptr<container::value_container> container);
+	shared_ptr<value_container> container);
 
 void received_file_from_file_line(const wstring& source_id,
 								  const wstring& source_sub_id,
 								  const wstring& indication_id,
 								  const wstring& target_path);
 
-void download_files(shared_ptr<container::value_container> container);
-void upload_files(shared_ptr<container::value_container> container);
-void uploaded_file(shared_ptr<container::value_container> container);
+void download_files(shared_ptr<value_container> container);
+void upload_files(shared_ptr<value_container> container);
+void uploaded_file(shared_ptr<value_container> container);
 
 int main(int argc, char* argv[])
 {
-	argument_manager arguments(argc, argv);
+	argument_manager arguments;
+	auto result = arguments.try_parse(argc, argv);
+	if (result.has_value()) {
+		std::wcout << "Argument parsing failed: " << std::wstring(result.value().begin(), result.value().end()) << std::endl;
+		return 0;
+	}
 	if (!parse_arguments(arguments))
 	{
 		return 0;
@@ -137,23 +146,29 @@ int main(int argc, char* argv[])
 	signal(SIGSEGV, signal_callback);
 	signal(SIGTERM, signal_callback);
 
-	_file_commands.insert({ L"download_files", &download_files });
-	_file_commands.insert({ L"upload_files", &upload_files });
+	_file_commands.insert({ "download_files", &download_files });
+	_file_commands.insert({ "upload_files", &upload_files });
 
-	logger::handle().set_write_console(logging_style);
-	logger::handle().set_target_level(log_level);
-	logger::handle().start(PROGRAM_NAME);
+	log_module::set_title(PROGRAM_NAME);
+	if (logging_style) {
+		log_module::console_target(log_level);
+	}
+	log_module::file_target(log_level);
+	log_module::start();
 
 	_file_manager = make_shared<file_manager>();
 
 	create_middle_server();
 	create_file_line();
 
-	_middle_server->wait_stop();
+	// Keep the server running until signaled
+	while (_middle_server != nullptr) {
+		this_thread::sleep_for(chrono::milliseconds(100));
+	}
 
-	_file_line->stop();
+	_file_line->stop_client();
 
-	logger::handle().stop();
+	log_module::stop();
 
 	return 0;
 }
@@ -162,97 +177,100 @@ void signal_callback(int signum) { _middle_server.reset(); }
 
 bool parse_arguments(argument_manager& arguments)
 {
-	auto bool_target = arguments.to_bool(L"--encrypt_mode");
-	if (bool_target != nullopt)
+	auto bool_target = arguments.to_bool("--encrypt_mode");
+	if (bool_target != std::nullopt)
 	{
 		encrypt_mode = *bool_target;
 	}
 
-	bool_target = arguments.to_bool(L"--compress_mode");
-	if (bool_target != nullopt)
+	bool_target = arguments.to_bool("--compress_mode");
+	if (bool_target != std::nullopt)
 	{
 		compress_mode = *bool_target;
 	}
 
-	auto ushort_target = arguments.to_ushort(L"--compress_block_size");
-	if (ushort_target != nullopt)
+	auto ushort_target = arguments.to_ushort("--compress_block_size");
+	if (ushort_target != std::nullopt)
 	{
 		compress_block_size = *ushort_target;
 	}
 
-	auto string_target = arguments.to_string(L"--main_server_ip");
-	if (string_target != nullopt)
+	auto string_target = arguments.to_string("--main_server_ip");
+	if (string_target != std::nullopt)
 	{
-		main_server_ip = *string_target;
+		auto [wide_str, err] = convert_string::to_wstring(*string_target);
+		if (wide_str.has_value()) {
+			main_server_ip = wide_str.value();
+		}
 	}
 
-	ushort_target = arguments.to_ushort(L"--main_server_port");
-	if (ushort_target != nullopt)
+	ushort_target = arguments.to_ushort("--main_server_port");
+	if (ushort_target != std::nullopt)
 	{
 		main_server_port = *ushort_target;
 	}
 
-	ushort_target = arguments.to_ushort(L"--middle_server_port");
-	if (ushort_target != nullopt)
+	ushort_target = arguments.to_ushort("--middle_server_port");
+	if (ushort_target != std::nullopt)
 	{
 		middle_server_port = *ushort_target;
 	}
 
-	ushort_target = arguments.to_ushort(L"--high_priority_count");
-	if (ushort_target != nullopt)
+	ushort_target = arguments.to_ushort("--high_priority_count");
+	if (ushort_target != std::nullopt)
 	{
 		high_priority_count = *ushort_target;
 	}
 
-	ushort_target = arguments.to_ushort(L"--normal_priority_count");
-	if (ushort_target != nullopt)
+	ushort_target = arguments.to_ushort("--normal_priority_count");
+	if (ushort_target != std::nullopt)
 	{
 		normal_priority_count = *ushort_target;
 	}
 
-	ushort_target = arguments.to_ushort(L"--low_priority_count");
-	if (ushort_target != nullopt)
+	ushort_target = arguments.to_ushort("--low_priority_count");
+	if (ushort_target != std::nullopt)
 	{
 		low_priority_count = *ushort_target;
 	}
 
-	auto int_target = arguments.to_int(L"--logging_level");
-	if (int_target != nullopt)
+	auto int_target = arguments.to_int("--log_types");
+	if (int_target != std::nullopt)
 	{
-		log_level = (logging_level)*int_target;
+		log_level = (log_types)*int_target;
 	}
 
 #ifdef _WIN32
-	auto ullong_target = arguments.to_ullong(L"--session_limit_count");
-	if (ullong_target != nullopt)
+	auto ullong_target = arguments.to_ullong("--session_limit_count");
+	if (ullong_target != std::nullopt)
 	{
 		session_limit_count = *ullong_target;
 	}
 #else
-	auto ulong_target = arguments.to_ulong(L"--session_limit_count");
-	if (ulong_target != nullopt)
+	auto long_target = arguments.to_long("--session_limit_count");
+	if (long_target != std::nullopt && *long_target >= 0)
 	{
-		session_limit_count = *ulong_target;
+		session_limit_count = static_cast<size_t>(*long_target);
 	}
 #endif
 
-	bool_target = arguments.to_bool(L"--write_console_only");
-	if (bool_target != nullopt && *bool_target)
+	bool_target = arguments.to_bool("--write_console_only");
+	if (bool_target != std::nullopt && *bool_target)
 	{
-		logging_style = logging_styles::console_only;
+		logging_style = true;
 
 		return true;
 	}
 
-	bool_target = arguments.to_bool(L"--write_console");
-	if (bool_target != nullopt && *bool_target)
+	bool_target = arguments.to_bool("--write_console");
+	if (bool_target != std::nullopt && *bool_target)
 	{
-		logging_style = logging_styles::file_and_console;
+		logging_style = true;
 
 		return true;
 	}
 
-	logging_style = logging_styles::file_only;
+	logging_style = false;
 
 	return true;
 }
@@ -265,16 +283,11 @@ void create_middle_server(void)
 	}
 
 	_middle_server = make_shared<messaging_server>(PROGRAM_NAME);
-	_middle_server->set_encrypt_mode(encrypt_mode);
-	_middle_server->set_compress_mode(compress_mode);
-	_middle_server->set_connection_key(middle_connection_key);
-	_middle_server->set_session_limit_count(session_limit_count);
-	_middle_server->set_possible_session_types({ session_types::message_line });
-	_middle_server->set_connection_notification(&connection_from_middle_server);
-	_middle_server->set_message_notification(
-		&received_message_from_middle_server);
-	_middle_server->start(middle_server_port, high_priority_count,
-						  normal_priority_count, low_priority_count);
+	// TODO: set_encrypt_mode, set_compress_mode, set_connection_key, set_session_limit_count, 
+	// set_possible_session_types, set_connection_notification, set_message_notification 
+	// APIs are not available in the new messaging_server
+	// Need to implement these features or use alternative approach
+	_middle_server->start_server(middle_server_port);
 }
 
 void create_file_line(void)
@@ -284,30 +297,27 @@ void create_file_line(void)
 		_file_line.reset();
 	}
 
-	_file_line = make_shared<messaging_client>(L"file_line");
-	_file_line->set_bridge_line(true);
-	_file_line->set_compress_mode(compress_mode);
-	_file_line->set_connection_key(main_connection_key);
-	_file_line->set_session_types(session_types::file_line);
-	_file_line->set_connection_notification(&connection_from_file_line);
-	_file_line->set_message_notification(&received_message_from_file_line);
-	_file_line->set_file_notification(&received_file_from_file_line);
-	_file_line->start(main_server_ip, main_server_port, high_priority_count,
-					  normal_priority_count, low_priority_count);
+	_file_line = make_shared<messaging_client>("file_line");
+	// TODO: set_bridge_line, set_compress_mode, set_connection_key, set_session_types,
+	// set_connection_notification, set_message_notification, set_file_notification
+	// APIs are not available in the new messaging_client
+	// Need to implement these features or use alternative approach
+	_file_line->start_client(std::get<0>(convert_string::to_string(main_server_ip)).value_or(""), main_server_port);
 }
 
 void connection_from_middle_server(const wstring& target_id,
 								   const wstring& target_sub_id,
 								   const bool& condition)
 {
-	logger::handle().write(
-		logging_level::information,
-		fmt::format(L"a client on middle server: {}[{}] is {}", target_id,
-					target_sub_id, condition ? L"connected" : L"disconnected"));
+	auto [tid_str, tid_err] = convert_string::to_string(target_id);
+	auto [tsid_str, tsid_err] = convert_string::to_string(target_sub_id);
+	log_module::write_information(
+		fmt::format("a client on middle server: {}[{}] is {}", tid_str.value_or(""),
+					tsid_str.value_or(""), condition ? "connected" : "disconnected").c_str());
 }
 
 void received_message_from_middle_server(
-	shared_ptr<container::value_container> container)
+	shared_ptr<value_container> container)
 {
 	if (container == nullptr)
 	{
@@ -315,22 +325,24 @@ void received_message_from_middle_server(
 	}
 
 	if (_file_line == nullptr
-		|| _file_line->get_confirm_status() != connection_conditions::confirmed)
+		// TODO: get_confirm_status() API is not available in new messaging_client
+		/* || _file_line->get_confirm_status() != connection_conditions::confirmed */)
 	{
 		if (_middle_server == nullptr)
 		{
 			return;
 		}
 
-		shared_ptr<container::value_container> response
+		shared_ptr<value_container> response
 			= container->copy(false);
 		response->swap_header();
 
-		response << make_shared<container::bool_value>(L"error", true);
-		response << make_shared<container::string_value>(
-			L"reason", L"main_server has not been connected.");
+		response << make_shared<bool_value>("error", true);
+		response << make_shared<string_value>(
+			"reason", "main_server has not been connected.");
 
-		_middle_server->send(response);
+		// TODO: _middle_server->send(response) API is not available
+		// Need to implement alternative approach
 
 		return;
 	}
@@ -338,15 +350,16 @@ void received_message_from_middle_server(
 	auto target = _file_commands.find(container->message_type());
 	if (target == _file_commands.end())
 	{
-		shared_ptr<container::value_container> response
+		shared_ptr<value_container> response
 			= container->copy(false);
 		response->swap_header();
 
-		response << make_shared<container::bool_value>(L"error", true);
-		response << make_shared<container::string_value>(
-			L"reason", L"cannot parse unknown message");
+		response << make_shared<bool_value>("error", true);
+		response << make_shared<string_value>(
+			"reason", "cannot parse unknown message");
 
-		_middle_server->send(response);
+		// TODO: _middle_server->send(response) API is not available
+		// Need to implement alternative approach
 
 		return;
 	}
@@ -363,12 +376,13 @@ void connection_from_file_line(const wstring& target_id,
 		return;
 	}
 
-	logger::handle().write(
-		logging_level::sequence,
-		fmt::format(L"{} on middle server is {} from target: {}[{}]",
-					_file_line->source_id(),
-					condition ? L"connected" : L"disconnected", target_id,
-					target_sub_id));
+	auto [tid_str, tid_err] = convert_string::to_string(target_id);
+	auto [tsid_str, tsid_err] = convert_string::to_string(target_sub_id);
+	log_module::write_sequence(
+		fmt::format("{} on middle server is {} from target: {}[{}]",
+					"file_line",  // TODO: _file_line->source_id() not available
+					condition ? "connected" : "disconnected", tid_str.value_or(""),
+					tsid_str.value_or("")).c_str());
 
 	if (condition)
 	{
@@ -382,19 +396,18 @@ void connection_from_file_line(const wstring& target_id,
 
 	this_thread::sleep_for(chrono::seconds(1));
 
-	_file_line->start(main_server_ip, main_server_port, high_priority_count,
-					  normal_priority_count, low_priority_count);
+	_file_line->start_client(std::get<0>(convert_string::to_string(main_server_ip)).value_or(""), main_server_port);
 }
 
 void received_message_from_file_line(
-	shared_ptr<container::value_container> container)
+	shared_ptr<value_container> container)
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-	if (container->message_type() == L"uploaded_file")
+	if (container->message_type() == "uploaded_file")
 	{
 		uploaded_file(container);
 
@@ -403,7 +416,8 @@ void received_message_from_file_line(
 
 	if (_middle_server)
 	{
-		_middle_server->send(container);
+		// TODO: _middle_server->send(container) API is not available
+		// Need to implement alternative approach
 	}
 }
 
@@ -412,25 +426,30 @@ void received_file_from_file_line(const wstring& target_id,
 								  const wstring& indication_id,
 								  const wstring& target_path)
 {
-	logger::handle().write(logging_level::parameter,
-						   fmt::format(L"target_id: {}, target_sub_id: {}, "
-									   L"indication_id: {}, file_path: {}",
-									   target_id, target_sub_id, indication_id,
-									   target_path));
+	auto [tid_str, tid_err] = convert_string::to_string(target_id);
+	auto [tsid_str, tsid_err] = convert_string::to_string(target_sub_id);
+	auto [iid_str, iid_err] = convert_string::to_string(indication_id);
+	auto [tp_str, tp_err] = convert_string::to_string(target_path);
+	log_module::write_information(
+		fmt::format("target_id: {}, target_sub_id: {}, "
+					"indication_id: {}, file_path: {}",
+					tid_str.value_or(""), tsid_str.value_or(""), iid_str.value_or(""),
+					tp_str.value_or("")).c_str());
 
-	shared_ptr<container::value_container> container
+	shared_ptr<value_container> container
 		= _file_manager->received(indication_id, target_path);
 
 	if (container != nullptr)
 	{
 		if (_middle_server)
 		{
-			_middle_server->send(container);
+			// TODO: _middle_server->send(container) API is not available
+			// Need to implement alternative approach
 		}
 	}
 }
 
-void download_files(shared_ptr<container::value_container> container)
+void download_files(shared_ptr<value_container> container)
 {
 	if (container == nullptr)
 	{
@@ -438,112 +457,124 @@ void download_files(shared_ptr<container::value_container> container)
 	}
 
 	if (_file_line == nullptr
-		|| _file_line->get_confirm_status() != connection_conditions::confirmed)
+		// TODO: get_confirm_status() API is not available in new messaging_client
+		/* || _file_line->get_confirm_status() != connection_conditions::confirmed */)
 	{
 		if (_middle_server == nullptr)
 		{
 			return;
 		}
 
-		shared_ptr<container::value_container> response
+		shared_ptr<value_container> response
 			= container->copy(false);
 		response->swap_header();
 
-		response << make_shared<container::bool_value>(L"error", true);
-		response << make_shared<container::string_value>(
-			L"reason", L"main_server has not been connected.");
+		response << make_shared<bool_value>("error", true);
+		response << make_shared<string_value>(
+			"reason", "main_server has not been connected.");
 
-		_middle_server->send(response);
+		// TODO: _middle_server->send(response) API is not available
+		// Need to implement alternative approach
 
 		return;
 	}
 
-	logger::handle().write(
-		logging_level::information,
-		L"attempt to prepare downloading files from main_server");
+	log_module::write_information(
+		"attempt to prepare downloading files from main_server");
 
 	vector<wstring> target_paths;
-	vector<shared_ptr<container::value>> files
-		= container->value_array(L"file");
+	vector<shared_ptr<value>> files
+		= container->value_array("file");
 	if (files.empty())
 	{
-		shared_ptr<container::value_container> response
+		shared_ptr<value_container> response
 			= container->copy(false);
 		response->swap_header();
 
-		response << make_shared<container::bool_value>(L"error", true);
-		response << make_shared<container::string_value>(
-			L"reason",
-			L"cannot download with empty file information (source or "
-			L"target) from main_server.");
+		response << make_shared<bool_value>("error", true);
+		response << make_shared<string_value>(
+			"reason",
+			"cannot download with empty file information (source or "
+			"target) from main_server.");
 
-		_middle_server->send(response);
+		// TODO: _middle_server->send(response) API is not available
+		// Need to implement alternative approach
 
 		return;
 	}
 
-	logger::handle().write(logging_level::information, container->serialize());
+	log_module::write_information(container->serialize().c_str());
 
 	for (auto& file : files)
 	{
-		logger::handle().write(logging_level::information, file->serialize());
+		log_module::write_information(file->serialize().c_str());
 
-		auto data_array = file->value_array(L"target");
+		auto data_array = file->value_array("target");
 		if (data_array.empty())
 		{
 			continue;
 		}
 
-		target_paths.push_back(data_array[0]->to_string());
+		auto [wide_str, err] = convert_string::to_wstring(data_array[0]->to_string());
+		if (wide_str.has_value()) {
+			target_paths.push_back(wide_str.value());
+		}
 	}
 
 	if (target_paths.empty())
 	{
-		shared_ptr<container::value_container> response
+		shared_ptr<value_container> response
 			= container->copy(false);
 		response->swap_header();
 
-		response << make_shared<container::bool_value>(L"error", true);
-		response << make_shared<container::string_value>(
-			L"reason",
-			L"cannot download with empty target file information from "
-			L"main_server.");
+		response << make_shared<bool_value>("error", true);
+		response << make_shared<string_value>(
+			"reason",
+			"cannot download with empty target file information from "
+			"main_server.");
 
-		_middle_server->send(response);
+		// TODO: _middle_server->send(response) API is not available
+		// Need to implement alternative approach
 
 		return;
 	}
 
-	_file_manager->set(container->get_value(L"indication_id")->to_string(),
-					   container->source_id(), container->source_sub_id(),
-					   target_paths);
+	auto [iid_str, iid_err] = convert_string::to_wstring(container->get_value("indication_id")->to_string());
+	auto [sid_str, sid_err] = convert_string::to_wstring(container->source_id());
+	auto [ssid_str, ssid_err] = convert_string::to_wstring(container->source_sub_id());
+	if (iid_str.has_value() && sid_str.has_value() && ssid_str.has_value()) {
+		_file_manager->set(iid_str.value(), sid_str.value(), ssid_str.value(), target_paths);
+	}
 
-	logger::handle().write(
-		logging_level::information,
-		L"prepared parsing of downloading files from main_server");
+	log_module::write_information(
+		"prepared parsing of downloading files from main_server");
 
 	if (_middle_server)
 	{
-		_middle_server->send(make_shared<container::value_container>(
+		// TODO: _middle_server->send API is not available
+		// Need to implement alternative approach for sending transfer_condition message
+		auto temp_container = make_shared<value_container>(
 			container->source_id(), container->source_sub_id(),
-			L"transfer_condition",
-			vector<shared_ptr<container::value>>{
-				make_shared<container::string_value>(
-					L"indication_id",
-					container->get_value(L"indication_id")->to_string()),
-				make_shared<container::ushort_value>(L"percentage", 0) }));
+			"transfer_condition",
+			vector<shared_ptr<value>>{
+				make_shared<string_value>(
+					"indication_id",
+					container->get_value("indication_id")->to_string()),
+				make_shared<numeric_value<unsigned short, value_types::ushort_value>>("percentage", 0) });
+		// _middle_server->send(temp_container);
 	}
 
-	shared_ptr<container::value_container> temp = container->copy();
-	temp->set_message_type(L"request_files");
+	shared_ptr<value_container> temp = container->copy();
+	temp->set_message_type("request_files");
 
 	if (_file_line)
 	{
-		_file_line->send(temp);
+		// TODO: _file_line->send(temp) API is not available
+		// Need to implement alternative approach
 	}
 }
 
-void upload_files(shared_ptr<container::value_container> container)
+void upload_files(shared_ptr<value_container> container)
 {
 	if (container == nullptr)
 	{
@@ -551,59 +582,62 @@ void upload_files(shared_ptr<container::value_container> container)
 	}
 
 	if (_file_line == nullptr
-		|| _file_line->get_confirm_status() != connection_conditions::confirmed)
+		// TODO: get_confirm_status() API is not available in new messaging_client
+		/* || _file_line->get_confirm_status() != connection_conditions::confirmed */)
 	{
 		if (_middle_server == nullptr)
 		{
 			return;
 		}
 
-		shared_ptr<container::value_container> response
+		shared_ptr<value_container> response
 			= container->copy(false);
 		response->swap_header();
 
-		response << make_shared<container::bool_value>(L"error", true);
-		response << make_shared<container::string_value>(
-			L"reason", L"main_server has not been connected.");
+		response << make_shared<bool_value>("error", true);
+		response << make_shared<string_value>(
+			"reason", "main_server has not been connected.");
 
-		_middle_server->send(response);
+		// TODO: _middle_server->send(response) API is not available
+		// Need to implement alternative approach
 
 		return;
 	}
 
-	logger::handle().write(
-		logging_level::information,
-		L"attempt to prepare uploading files to main_server");
+	log_module::write_information(
+		"attempt to prepare uploading files to main_server");
 
 	if (_file_line)
 	{
-		container << make_shared<container::string_value>(
-			L"gateway_source_id", container->source_id());
-		container << make_shared<container::string_value>(
-			L"gateway_source_sub_id", container->source_sub_id());
-		container->set_source(_file_line->source_id(),
-							  _file_line->source_sub_id());
-
-		_file_line->send(container);
+		// TODO: Container modification and sending through file_line
+		// The new messaging_client API doesn't support these operations
+		// Need to implement alternative approach for:
+		// 1. Adding gateway_source_id and gateway_source_sub_id to container
+		// 2. Setting source information
+		// 3. Sending container through file_line
 	}
 }
 
-void uploaded_file(shared_ptr<container::value_container> container)
+void uploaded_file(shared_ptr<value_container> container)
 {
 	if (container == nullptr)
 	{
 		return;
 	}
 
-	shared_ptr<container::value_container> temp = _file_manager->received(
-		container->get_value(L"indication_id")->to_string(),
-		container->get_value(L"target_path")->to_string());
+	auto [iid_str2, iid_err2] = convert_string::to_wstring(container->get_value("indication_id")->to_string());
+	auto [tp_str2, tp_err2] = convert_string::to_wstring(container->get_value("target_path")->to_string());
+	shared_ptr<value_container> temp;
+	if (iid_str2.has_value() && tp_str2.has_value()) {
+		temp = _file_manager->received(iid_str2.value(), tp_str2.value());
+	}
 
 	if (temp != nullptr)
 	{
 		if (_middle_server)
 		{
-			_middle_server->send(temp);
+			// TODO: _middle_server->send(temp) API is not available
+			// Need to implement alternative approach
 		}
 	}
 }

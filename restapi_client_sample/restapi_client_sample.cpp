@@ -1,4 +1,4 @@
-﻿/*****************************************************************************
+/*****************************************************************************
 BSD 3-Clause License
 
 Copyright (c) 2021, 🍀☀🌕🌥 🌊
@@ -47,8 +47,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "fmt/format.h"
 #include "fmt/xchar.h"
 
-#include "cpprest/http_client.h"
-#include "cpprest/json.h"
+// Using httplib and nlohmann_json instead of cpprestsdk
+#include <httplib.h>
+#include <nlohmann/json.hpp>
 
 #include <future>
 #include <vector>
@@ -62,9 +63,8 @@ using namespace converting;
 using namespace folder_handler;
 using namespace argument_parser;
 
-using namespace web;
-using namespace web::http;
-using namespace web::http::client;
+// Use nlohmann::json instead of web::json
+using json = nlohmann::json;
 
 #ifdef _DEBUG
 bool encrypt_mode = false;
@@ -83,7 +83,7 @@ wstring target_folder = L"";
 unsigned short server_port = 7654;
 
 shared_ptr<thread_pool> _thread_pool;
-shared_ptr<http_client> _rest_client;
+shared_ptr<httplib::Client> _rest_client;
 
 promise<bool> _promise_status;
 future<bool> _future_status;
@@ -130,56 +130,42 @@ int main(int argc, char* argv[])
 			vector<priorities>{ priorities::high, priorities::normal }),
 		true);
 
-#ifdef _WIN32
-	_rest_client = make_shared<http_client>(
-		fmt::format(L"http://localhost:{}/restapi", server_port));
-#else
-	_rest_client = make_shared<http_client>(
-		fmt::format("http://localhost:{}/restapi", server_port));
-#endif
+	// Create httplib client
+	_rest_client = make_shared<httplib::Client>(
+		fmt::format("http://localhost:{}", server_port));
 
 	_future_status = _promise_status.get_future();
 
-	json::value container = json::value::object(true);
+	// Using nlohmann::json
+	json container;
 
-#ifdef _WIN32
-	container[MESSAGE_TYPE] = json::value::string(L"download_files");
-	container[INDICATION_ID] = json::value::string(L"download_test");
-#else
-	container[converter::to_string(MESSAGE_TYPE)]
-		= json::value::string("download_files");
-	container[converter::to_string(INDICATION_ID)]
-		= json::value::string("download_test");
-#endif
+	container["message_type"] = "download_files";
+	container["indication_id"] = "download_test";
+	container["files"] = json::array();
 
 	int index = 0;
+	for (auto& source : sources)
+	{
+		json file;
 #ifdef _WIN32
-	container[FILES] = json::value::array();
-	for (auto& source : sources)
-	{
-		container[FILES][index][SOURCE] = json::value::string(source);
-		container[FILES][index][TARGET] = json::value::string(
+		file["source"] = converter::to_string(source);
+		file["target"] = converter::to_string(
 			converter::replace2(source, source_folder, target_folder));
-		index++;
-	}
 #else
-	container[converter::to_string(FILES)] = json::value::array();
-	for (auto& source : sources)
-	{
-		container[converter::to_string(FILES)][index]
-				 [converter::to_string(SOURCE)]
-			= json::value::string(converter::to_string(source));
-		container[converter::to_string(FILES)][index]
-				 [converter::to_string(TARGET)]
-			= json::value::string(converter::to_string(
-				converter::replace2(source, source_folder, target_folder)));
+		file["source"] = converter::to_string(source);
+		file["target"] = converter::to_string(
+			converter::replace2(source, source_folder, target_folder));
+#endif
+		container["files"].push_back(file);
 		index++;
 	}
-#endif
+
+	// Convert JSON to bytes and push jobs
+	std::string json_str = container.dump();
+	std::vector<unsigned char> json_bytes(json_str.begin(), json_str.end());
 
 	_thread_pool->push(make_shared<job>(
-		priorities::high, converter::to_array(container.serialize()),
-		&post_request));
+		priorities::high, json_bytes, &post_request));
 	_thread_pool->push(make_shared<job>(priorities::low, &get_request));
 
 	_future_status.wait();
@@ -194,184 +180,113 @@ int main(int argc, char* argv[])
 
 void get_request(void)
 {
-	http_request request(methods::GET);
+	// Set headers
+	httplib::Headers headers = {
+		{"previous_message", "clear"},
+		{"indication_id", "download_test"}
+	};
 
-#ifdef _WIN32
-	request.headers().add(L"previous_message", L"clear");
-	request.headers().add(INDICATION_ID, L"download_test");
-#else
-	request.headers().add("previous_message", "clear");
-	request.headers().add("indication_id", "download_test");
-#endif
-	_rest_client->request(request)
-		.then(
-			[](http_response response)
-			{
-				if (response.status_code() != status_codes::OK)
-				{
-					this_thread::sleep_for(chrono::seconds(1));
+	// Make GET request
+	auto result = _rest_client->Get("/restapi", headers);
+	
+	if (!result || result->status != 200) {
+		// If failed or status is not OK, retry after a delay
+		this_thread::sleep_for(chrono::seconds(1));
+		_thread_pool->push(make_shared<job>(priorities::low, &get_request));
+		return;
+	}
 
-					_thread_pool->push(
-						make_shared<job>(priorities::low, &get_request));
+	// Parse JSON
+	try {
+		json answer = json::parse(result->body);
+		if (answer.empty() || !answer.contains("messages")) {
+			return;
+		}
 
-					return;
-				}
+		auto& messages = answer["messages"];
+		for (auto& message : messages) {
+			if (message["percentage"] == 0) {
+				logger::handle().write(
+					logging_level::information,
+					converter::to_wstring(fmt::format(
+						"started {}: [{}]",
+						message["message_type"].get<std::string>(),
+						message["indication_id"].get<std::string>())));
+				continue;
+			}
 
-				auto answer = response.extract_json().get();
-				if (answer.is_null())
-				{
-					return;
-				}
+			logger::handle().write(
+				logging_level::information,
+				converter::to_wstring(fmt::format(
+					"received percentage: [{}] {}%",
+					message["indication_id"].get<std::string>(),
+					message["percentage"].get<int>())));
 
-#ifdef _WIN32
-				auto& messages = answer[L"messages"].as_array();
-				for (auto& message : messages)
-				{
-					if (message[L"percentage"].as_integer() == 0)
-					{
-						logger::handle().write(
-							logging_level::information,
-							fmt::format(L"started {}: [{}]",
-										message[MESSAGE_TYPE].as_string(),
-										message[INDICATION_ID].as_string()));
+			if (message["percentage"] != 100) {
+				continue;
+			}
 
-						continue;
-					}
+			if (message["completed"]) {
+				logger::handle().write(
+					logging_level::information,
+					converter::to_wstring(fmt::format(
+						"completed {}: [{}]",
+						message["message_type"].get<std::string>(),
+						message["indication_id"].get<std::string>())));
 
-					logger::handle().write(
-						logging_level::information,
-						fmt::format(L"received percentage: [{}] {}%",
-									message[INDICATION_ID].as_string(),
-									message[L"percentage"].as_integer()));
+				_promise_status.set_value(true);
+				return;
+			}
 
-					if (message[L"percentage"].as_integer() != 100)
-					{
-						continue;
-					}
+			logger::handle().write(
+				logging_level::information,
+				converter::to_wstring(fmt::format(
+					"cannot complete {}: [{}]",
+					message["message_type"].get<std::string>(),
+					message["indication_id"].get<std::string>())));
 
-					if (message[L"completed"].as_bool())
-					{
-						logger::handle().write(
-							logging_level::information,
-							fmt::format(L"completed {}: [{}]",
-										message[MESSAGE_TYPE].as_string(),
-										message[INDICATION_ID].as_string()));
+			_promise_status.set_value(false);
+			return;
+		}
+	} catch (const std::exception& e) {
+		logger::handle().write(
+			logging_level::error,
+			converter::to_wstring(fmt::format("JSON parsing error: {}", e.what())));
+	}
 
-						_promise_status.set_value(true);
-
-						return;
-					}
-
-					logger::handle().write(
-						logging_level::information,
-						fmt::format(L"cannot complete {}: [{}]",
-									message[MESSAGE_TYPE].as_string(),
-									message[INDICATION_ID].as_string()));
-
-					_promise_status.set_value(false);
-
-					return;
-				}
-#else
-				auto& messages = answer["messages"].as_array();
-				for (auto& message : messages)
-				{
-					if (message["percentage"].as_integer() == 0)
-					{
-						logger::handle().write(
-							logging_level::information,
-							converter::to_wstring(fmt::format(
-								"started {}: [{}]",
-								message[converter::to_string(MESSAGE_TYPE)]
-									.as_string(),
-								message[converter::to_string(INDICATION_ID)]
-									.as_string())));
-
-						continue;
-					}
-
-					logger::handle().write(
-						logging_level::information,
-						converter::to_wstring(fmt::format(
-							"received percentage: [{}] {}%",
-							message[converter::to_string(INDICATION_ID)]
-								.as_string(),
-							message["percentage"].as_integer())));
-
-					if (message["percentage"].as_integer() != 100)
-					{
-						continue;
-					}
-
-					if (message["completed"].as_bool())
-					{
-						logger::handle().write(
-							logging_level::information,
-							converter::to_wstring(fmt::format(
-								"completed {}: [{}]",
-								message[converter::to_string(MESSAGE_TYPE)]
-									.as_string(),
-								message[converter::to_string(INDICATION_ID)]
-									.as_string())));
-
-						_promise_status.set_value(true);
-
-						return;
-					}
-
-					logger::handle().write(
-						logging_level::information,
-						converter::to_wstring(fmt::format(
-							"cannot complete {}: [{}]",
-							message[converter::to_string(MESSAGE_TYPE)]
-								.as_string(),
-							message[converter::to_string(INDICATION_ID)]
-								.as_string())));
-
-					_promise_status.set_value(false);
-
-					return;
-				}
-#endif
-
-				_thread_pool->push(
-					make_shared<job>(priorities::low, &get_request));
-			})
-		.wait();
+	// Continue polling
+	_thread_pool->push(make_shared<job>(priorities::low, &get_request));
 }
 
 void post_request(const vector<unsigned char>& data)
 {
-#ifdef _WIN32
-	auto request_value = json::value::parse(converter::to_wstring(data));
-#else
-	auto request_value = json::value::parse(converter::to_string(data));
-#endif
+	// Convert bytes to string
+	std::string json_str(data.begin(), data.end());
+	
+	// Parse JSON
+	try {
+		json request_value = json::parse(json_str);
+		
+		// Set headers for POST request
+		httplib::Headers headers = {
+			{"Content-Type", "application/json"}
+		};
+		
+		// Make POST request
+		auto result = _rest_client->Post("/restapi", headers, request_value.dump(), "application/json");
+		
+		if (result && result->status == 200) {
+			logger::handle().write(
+				logging_level::information,
+				converter::to_wstring(result->body));
+		}
+	} catch (const std::exception& e) {
+		logger::handle().write(
+			logging_level::error,
+			converter::to_wstring(fmt::format("JSON parsing error: {}", e.what())));
+	}
 
-#ifdef _WIN32
-	_rest_client
-		->request(methods::POST, L"", request_value)
-#else
-	_rest_client
-		->request(methods::POST, "", request_value)
-#endif
-		.then(
-			[](http_response response)
-			{
-				if (response.status_code() == status_codes::OK)
-				{
-#ifdef _WIN32
-					logger::handle().write(logging_level::information,
-										   response.extract_string().get());
-#else
-					logger::handle().write(
-						logging_level::information,
-						converter::to_wstring(response.extract_string().get()));
-#endif
-				}
-			})
-		.wait();
-
+	// Schedule next GET request
 	_thread_pool->push(make_shared<job>(priorities::low, &get_request));
 }
 
